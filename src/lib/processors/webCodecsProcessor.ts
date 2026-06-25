@@ -15,6 +15,7 @@ import {
   clearCanvas,
   createOutputFileName,
   emitProgress,
+  formatProcessingFrameMessage,
   getCanvas2dContext,
 } from "./processingUtils";
 import type { ProcessInput, ProcessResult, Processor } from "./types";
@@ -142,7 +143,7 @@ async function encodeFramesAtTimestamps(
       stage: "encoding",
       completedFrames: outputFrameIndex,
       totalFrames: input.samplingPlan.frameCount,
-      message: `Encoding output frame ${outputFrameIndex} of ${input.samplingPlan.frameCount}`,
+      message: formatProcessingFrameMessage(outputFrameIndex, input.samplingPlan.frameCount),
     });
   }
 }
@@ -191,7 +192,7 @@ async function encodeEveryNthFrame(
       stage: "encoding",
       completedFrames: outputFrameIndex,
       totalFrames: input.samplingPlan.frameCount,
-      message: `Encoding output frame ${outputFrameIndex} of ${input.samplingPlan.frameCount}`,
+      message: formatProcessingFrameMessage(outputFrameIndex, input.samplingPlan.frameCount),
     });
   }
 }

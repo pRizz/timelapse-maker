@@ -4,6 +4,7 @@ import {
   createOutputFileName,
   drawVideoContain,
   emitProgress,
+  formatProcessingFrameMessage,
   getCanvas2dContext,
   waitForMilliseconds,
 } from "./processingUtils";
@@ -114,7 +115,7 @@ async function processWithMediaRecorder(input: ProcessInput): Promise<ProcessRes
         stage: "decoding",
         completedFrames: index,
         totalFrames: input.samplingPlan.frameCount,
-        message: `Seeking source frame ${index + 1} of ${input.samplingPlan.frameCount}`,
+        message: formatProcessingFrameMessage(index + 1, input.samplingPlan.frameCount),
       });
 
       await seekVideo(video, timestamp, input.signal);
@@ -130,7 +131,7 @@ async function processWithMediaRecorder(input: ProcessInput): Promise<ProcessRes
         stage: "encoding",
         completedFrames: index + 1,
         totalFrames: input.samplingPlan.frameCount,
-        message: `Recording output frame ${index + 1} of ${input.samplingPlan.frameCount}`,
+        message: formatProcessingFrameMessage(index + 1, input.samplingPlan.frameCount),
       });
 
       // MediaRecorder timestamps frames in real time. This fallback is slower than

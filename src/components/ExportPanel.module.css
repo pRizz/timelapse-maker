@@ -52,6 +52,8 @@
 .progressBlock p {
   margin: 8px 0 0;
   color: var(--color-muted);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 .downloadPanel {

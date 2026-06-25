@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import type { ProcessorSelection, ProcessInput, ProcessResult } from "./lib/processors/types";
+import { formatProcessingFrameMessage } from "./lib/processors/processingUtils";
 import type { VideoMetadata } from "./lib/videoMetadata";
 
 const mocks = vi.hoisted(() => ({
@@ -144,10 +145,17 @@ describe("App", () => {
     // Arrange
     const file = new File(["video"], "source.mp4", { type: "video/mp4" });
     const deferred = createDeferred<void>();
-    mocks.process.mockImplementationOnce((input: ProcessInput) =>
-      deferred.promise.then(() => buildProcessResult(input)),
-    );
-    const { baseElement, getByText } = render(() => <App />);
+    mocks.process.mockImplementationOnce((input: ProcessInput) => {
+      input.onProgress({
+        stage: "encoding",
+        completedFrames: 12,
+        totalFrames: 240,
+        message: formatProcessingFrameMessage(12, 240),
+      });
+
+      return deferred.promise.then(() => buildProcessResult(input));
+    });
+    const { baseElement, getAllByText, getByText } = render(() => <App />);
     const dropZone = getByText("Drop an iPhone, MP4, or MOV video").closest("label");
 
     // Act
@@ -162,6 +170,7 @@ describe("App", () => {
     // Assert
     await waitFor(() => expect(mocks.process).toHaveBeenCalledTimes(1));
     expect(getByText("Preview is generating")).toBeInTheDocument();
+    expect(getAllByText("Processing frame 12 / 240")).toHaveLength(2);
     deferred.resolve();
     await waitFor(() =>
       expect(baseElement.querySelector("video")?.getAttribute("src")).toBe("blob:preview"),

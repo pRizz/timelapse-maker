@@ -23,6 +23,10 @@ export function emitProgress(
   onProgress(progress);
 }
 
+export function formatProcessingFrameMessage(currentFrame: number, totalFrames: number): string {
+  return `Processing frame ${currentFrame} / ${totalFrames}`;
+}
+
 export function getCanvas2dContext(
   canvas: HTMLCanvasElement,
 ): CanvasRenderingContext2D {

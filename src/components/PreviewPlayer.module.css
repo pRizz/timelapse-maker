@@ -87,6 +87,8 @@
 
 .generatingState p {
   margin: 0;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 .spinner {
