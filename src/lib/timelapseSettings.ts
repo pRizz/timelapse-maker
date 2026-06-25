@@ -48,13 +48,15 @@ export type SamplingPlan = {
   timestampsSeconds: number[];
   frameCount: number;
   estimatedOutputDurationSeconds: number;
+  outputFrameDurationSeconds: number;
+  effectiveOutputFps: number;
+  isCapped: boolean;
   maybeEffectiveSpeed: number | null;
   warnings: string[];
 };
 
 export type SamplingPlanOptions = {
   maxFrameCount?: number;
-  maxOutputDurationSeconds?: number;
 };
 
 export type ValidationCapabilities = {
@@ -142,23 +144,22 @@ export function buildSamplingPlan(
 ): SamplingPlan {
   const warnings: string[] = [];
   const timestampsSeconds = buildFullTimestamps(metadata, settings, warnings);
-  const maxFramesFromDuration =
-    options.maxOutputDurationSeconds === undefined
-      ? Number.POSITIVE_INFINITY
-      : Math.floor(options.maxOutputDurationSeconds * settings.outputFps);
-  const maybeMaxFrameCount = Math.min(
-    options.maxFrameCount ?? Number.POSITIVE_INFINITY,
-    maxFramesFromDuration,
-  );
-  const cappedTimestamps = timestampsSeconds.slice(0, maybeMaxFrameCount);
-  const frameCount = cappedTimestamps.length;
-  const estimatedOutputDurationSeconds = frameCount / settings.outputFps;
+  const fullFrameCount = timestampsSeconds.length;
+  const estimatedOutputDurationSeconds = fullFrameCount / settings.outputFps;
+  const maxFrameCount = normalizeMaxFrameCount(options.maxFrameCount, fullFrameCount);
+  const isCapped = fullFrameCount > maxFrameCount;
+  const outputTimestampsSeconds = isCapped
+    ? selectRepresentativeTimestamps(timestampsSeconds, maxFrameCount)
+    : timestampsSeconds;
+  const frameCount = outputTimestampsSeconds.length;
+  const outputFrameDurationSeconds = estimatedOutputDurationSeconds / frameCount;
+  const effectiveOutputFps = frameCount / estimatedOutputDurationSeconds;
   const maybeEffectiveSpeed =
     estimatedOutputDurationSeconds > 0
       ? metadata.durationSeconds / estimatedOutputDurationSeconds
       : null;
 
-  if (timestampsSeconds.length > frameCount) {
+  if (isCapped) {
     warnings.push("Preview is capped and does not include the full export.");
   }
 
@@ -167,9 +168,12 @@ export function buildSamplingPlan(
   }
 
   return {
-    timestampsSeconds: cappedTimestamps,
+    timestampsSeconds: outputTimestampsSeconds,
     frameCount,
     estimatedOutputDurationSeconds,
+    outputFrameDurationSeconds,
+    effectiveOutputFps,
+    isCapped,
     maybeEffectiveSpeed,
     warnings,
   };
@@ -287,6 +291,34 @@ function buildEvenlySpacedTimestamps(durationSeconds: number, frameCount: number
   return Array.from({ length: frameCount }, (_value, index) =>
     clampTimestamp(index * intervalSeconds, durationSeconds),
   );
+}
+
+function normalizeMaxFrameCount(
+  maybeMaxFrameCount: number | undefined,
+  fullFrameCount: number,
+): number {
+  if (maybeMaxFrameCount === undefined || !Number.isFinite(maybeMaxFrameCount)) {
+    return fullFrameCount;
+  }
+
+  return Math.max(1, Math.floor(maybeMaxFrameCount));
+}
+
+function selectRepresentativeTimestamps(timestampsSeconds: number[], frameCount: number): number[] {
+  if (frameCount >= timestampsSeconds.length) {
+    return timestampsSeconds;
+  }
+
+  if (frameCount <= 1) {
+    return [timestampsSeconds[0] ?? 0];
+  }
+
+  const maxSourceIndex = timestampsSeconds.length - 1;
+
+  return Array.from({ length: frameCount }, (_value, index) => {
+    const sourceIndex = Math.round((index * maxSourceIndex) / (frameCount - 1));
+    return timestampsSeconds[sourceIndex] ?? timestampsSeconds[maxSourceIndex] ?? 0;
+  });
 }
 
 function validateSampling(

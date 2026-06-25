@@ -18,8 +18,15 @@ type NativeMetadata = {
   maybeEstimatedFps: number | null;
 };
 
+type MediabunnyVideoStats = {
+  maybeDurationSeconds: number | null;
+  maybeEstimatedFps: number | null;
+};
+
 const FPS_SAMPLE_LIMIT = 24;
 const FPS_SAMPLE_TIMEOUT_MS = 1_250;
+const DURATION_DISAGREEMENT_MIN_SECONDS = 0.5;
+const DURATION_DISAGREEMENT_RATIO = 0.05;
 
 export async function loadVideoMetadata(
   file: File,
@@ -29,16 +36,19 @@ export async function loadVideoMetadata(
 
   try {
     const nativeMetadata = await loadNativeMetadata(file, objectUrl, signal);
-    const maybeMediabunnyFps = await maybeEstimateFpsWithMediabunny(file);
+    const maybeMediabunnyStats = await maybeReadVideoStatsWithMediabunny(file);
 
     return {
       fileName: file.name,
       fileType: file.type || "Unknown",
       fileSizeBytes: file.size,
-      durationSeconds: nativeMetadata.durationSeconds,
+      durationSeconds: resolveMetadataDuration(
+        nativeMetadata.durationSeconds,
+        maybeMediabunnyStats?.maybeDurationSeconds ?? null,
+      ),
       width: nativeMetadata.width,
       height: nativeMetadata.height,
-      maybeEstimatedFps: maybeMediabunnyFps ?? nativeMetadata.maybeEstimatedFps,
+      maybeEstimatedFps: maybeMediabunnyStats?.maybeEstimatedFps ?? nativeMetadata.maybeEstimatedFps,
       canPlayNatively: nativeMetadata.canPlayNatively,
       warnings: buildMetadataWarnings(file, nativeMetadata),
     };
@@ -101,7 +111,30 @@ async function loadNativeMetadata(
   };
 }
 
-async function maybeEstimateFpsWithMediabunny(file: File): Promise<number | null> {
+export function resolveMetadataDuration(
+  nativeDurationSeconds: number,
+  maybeComputedDurationSeconds: number | null,
+): number {
+  if (!isUsableDuration(maybeComputedDurationSeconds)) {
+    return nativeDurationSeconds;
+  }
+
+  if (!isUsableDuration(nativeDurationSeconds)) {
+    return maybeComputedDurationSeconds;
+  }
+
+  const differenceSeconds = Math.abs(nativeDurationSeconds - maybeComputedDurationSeconds);
+  const disagreementThresholdSeconds = Math.max(
+    DURATION_DISAGREEMENT_MIN_SECONDS,
+    Math.min(nativeDurationSeconds, maybeComputedDurationSeconds) * DURATION_DISAGREEMENT_RATIO,
+  );
+
+  return differenceSeconds > disagreementThresholdSeconds
+    ? maybeComputedDurationSeconds
+    : nativeDurationSeconds;
+}
+
+async function maybeReadVideoStatsWithMediabunny(file: File): Promise<MediabunnyVideoStats | null> {
   try {
     const { ALL_FORMATS, BlobSource, Input } = await import("mediabunny");
     const input = new Input({
@@ -114,7 +147,39 @@ async function maybeEstimateFpsWithMediabunny(file: File): Promise<number | null
       return null;
     }
 
-    const packetStats = await maybeVideoTrack.computePacketStats(120, {
+    const [maybeDurationSeconds, maybeEstimatedFps] = await Promise.all([
+      maybeComputeMediabunnyDuration(maybeVideoTrack),
+      maybeComputeMediabunnyFps(maybeVideoTrack),
+    ]);
+
+    return {
+      maybeDurationSeconds,
+      maybeEstimatedFps,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function maybeComputeMediabunnyDuration(videoTrack: {
+  computeDuration: (options: { skipLiveWait: boolean }) => Promise<number>;
+}): Promise<number | null> {
+  try {
+    const durationSeconds = await videoTrack.computeDuration({ skipLiveWait: true });
+    return isUsableDuration(durationSeconds) ? durationSeconds : null;
+  } catch {
+    return null;
+  }
+}
+
+async function maybeComputeMediabunnyFps(videoTrack: {
+  computePacketStats: (
+    targetPacketCount: number,
+    options: { skipLiveWait: boolean },
+  ) => Promise<{ averagePacketRate: number }>;
+}): Promise<number | null> {
+  try {
+    const packetStats = await videoTrack.computePacketStats(120, {
       skipLiveWait: true,
     });
 
@@ -126,6 +191,14 @@ async function maybeEstimateFpsWithMediabunny(file: File): Promise<number | null
   } catch {
     return null;
   }
+}
+
+function isUsableDuration(maybeDurationSeconds: number | null): maybeDurationSeconds is number {
+  return Boolean(
+    maybeDurationSeconds &&
+      Number.isFinite(maybeDurationSeconds) &&
+      maybeDurationSeconds > 0,
+  );
 }
 
 async function maybeEstimateFpsWithVideoElement(

@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
-import type { ProcessorSelection, ProcessInput } from "./lib/processors/types";
+import type { ProcessorSelection, ProcessInput, ProcessResult } from "./lib/processors/types";
 import type { VideoMetadata } from "./lib/videoMetadata";
 
 const mocks = vi.hoisted(() => ({
@@ -60,14 +60,7 @@ const processorSelection: ProcessorSelection = {
 beforeEach(() => {
   mocks.loadVideoMetadata.mockResolvedValue(baseMetadata);
   mocks.selectProcessor.mockResolvedValue(processorSelection);
-  mocks.process.mockImplementation(async (input: ProcessInput) => ({
-    blob: new Blob(["preview"], { type: "video/mp4" }),
-    mimeType: "video/mp4",
-    fileName: "source-preview.mp4",
-    durationSeconds: input.samplingPlan.estimatedOutputDurationSeconds,
-    frameCount: input.samplingPlan.frameCount,
-    warnings: [],
-  }));
+  mocks.process.mockImplementation(async (input: ProcessInput) => buildProcessResult(input));
 
   Object.defineProperty(URL, "createObjectURL", {
     configurable: true,
@@ -81,6 +74,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.clearAllMocks();
 });
 
@@ -114,6 +108,10 @@ describe("App", () => {
   it("automatically generates a capped preview after dropping a source video", async () => {
     // Arrange
     const file = new File(["video"], "source.mp4", { type: "video/mp4" });
+    mocks.loadVideoMetadata.mockResolvedValueOnce({
+      ...baseMetadata,
+      durationSeconds: 600,
+    });
     const { baseElement, getByText } = render(() => <App />);
     const dropZone = getByText("Drop an iPhone, MP4, or MOV video").closest("label");
 
@@ -134,9 +132,102 @@ describe("App", () => {
     expect(processInput.settings.speedMultiplier).toBe(30);
     expect(processInput.settings.outputFps).toBe(60);
     expect(processInput.samplingPlan.frameCount).toBe(240);
-    expect(processInput.samplingPlan.estimatedOutputDurationSeconds).toBe(4);
+    expect(processInput.samplingPlan.estimatedOutputDurationSeconds).toBe(20);
+    expect(processInput.samplingPlan.outputFrameDurationSeconds).toBeCloseTo(20 / 240);
+    expect(processInput.samplingPlan.isCapped).toBe(true);
     await waitFor(() =>
       expect(baseElement.querySelector("video")?.getAttribute("src")).toBe("blob:preview"),
     );
   });
+
+  it("shows preview progress while the automatic preview is pending", async () => {
+    // Arrange
+    const file = new File(["video"], "source.mp4", { type: "video/mp4" });
+    const deferred = createDeferred<void>();
+    mocks.process.mockImplementationOnce((input: ProcessInput) =>
+      deferred.promise.then(() => buildProcessResult(input)),
+    );
+    const { baseElement, getByText } = render(() => <App />);
+    const dropZone = getByText("Drop an iPhone, MP4, or MOV video").closest("label");
+
+    // Act
+    fireEvent.drop(dropZone!, {
+      dataTransfer: {
+        files: {
+          item: (index: number) => (index === 0 ? file : null),
+        },
+      },
+    });
+
+    // Assert
+    await waitFor(() => expect(mocks.process).toHaveBeenCalledTimes(1));
+    expect(getByText("Preview is generating")).toBeInTheDocument();
+    deferred.resolve();
+    await waitFor(() =>
+      expect(baseElement.querySelector("video")?.getAttribute("src")).toBe("blob:preview"),
+    );
+  });
+
+  it("starts a download after export while keeping the download link available", async () => {
+    // Arrange
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    const file = new File(["video"], "source.mp4", { type: "video/mp4" });
+    const { baseElement, getByText } = render(() => <App />);
+    const dropZone = getByText("Drop an iPhone, MP4, or MOV video").closest("label");
+
+    fireEvent.drop(dropZone!, {
+      dataTransfer: {
+        files: {
+          item: (index: number) => (index === 0 ? file : null),
+        },
+      },
+    });
+    await waitFor(() =>
+      expect(baseElement.querySelector("video")?.getAttribute("src")).toBe("blob:preview"),
+    );
+    const maybeExportButton = Array.from(baseElement.querySelectorAll("button")).find((button) =>
+      /export video/i.test(button.textContent ?? ""),
+    );
+
+    // Act
+    fireEvent.click(maybeExportButton!);
+
+    // Assert
+    await waitFor(() => expect(mocks.process).toHaveBeenCalledTimes(2));
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(baseElement.querySelector('a[download="source-timelapse.mp4"]')).not.toBeNull(),
+    );
+    expect(getByText("Download")).toBeInTheDocument();
+  });
 });
+
+function buildProcessResult(input: ProcessInput): ProcessResult {
+  const suffix = input.mode === "preview" ? "preview" : "timelapse";
+
+  return {
+    blob: new Blob([input.mode], { type: "video/mp4" }),
+    mimeType: "video/mp4",
+    fileName: `source-${suffix}.mp4`,
+    durationSeconds: input.samplingPlan.estimatedOutputDurationSeconds,
+    frameCount: input.samplingPlan.frameCount,
+    warnings: [],
+  };
+}
+
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason?: unknown) => void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, resolve, reject };
+}

@@ -33,7 +33,33 @@ describe("timelapse settings", () => {
     expect(settings.speedMultiplier).toBe(30);
     expect(plan.frameCount).toBe(240);
     expect(plan.estimatedOutputDurationSeconds).toBe(4);
+    expect(plan.outputFrameDurationSeconds).toBeCloseTo(1 / 60);
+    expect(plan.effectiveOutputFps).toBe(60);
+    expect(plan.isCapped).toBe(false);
     expect(plan.maybeEffectiveSpeed).toBe(30);
+  });
+
+  it("keeps capped preview duration aligned with the full export", () => {
+    // Arrange
+    const metadata = {
+      ...baseMetadata,
+      durationSeconds: 600,
+    };
+    const settings = createDefaultSettings(metadata);
+
+    // Act
+    const plan = buildSamplingPlan(metadata, settings, { maxFrameCount: 240 });
+
+    // Assert
+    expect(plan.frameCount).toBe(240);
+    expect(plan.estimatedOutputDurationSeconds).toBe(20);
+    expect(plan.outputFrameDurationSeconds).toBeCloseTo(20 / 240);
+    expect(plan.effectiveOutputFps).toBe(12);
+    expect(plan.isCapped).toBe(true);
+    expect(plan.maybeEffectiveSpeed).toBe(30);
+    expect(plan.timestampsSeconds[0]).toBe(0);
+    expect(plan.timestampsSeconds.at(-1)).toBeGreaterThan(590);
+    expect(plan.warnings).toContain("Preview is capped and does not include the full export.");
   });
 
   it("samples interval timestamps from zero", () => {

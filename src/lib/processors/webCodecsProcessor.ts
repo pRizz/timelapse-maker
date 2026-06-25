@@ -48,7 +48,7 @@ async function processWithWebCodecs(input: ProcessInput): Promise<ProcessResult>
   });
 
   output.addVideoTrack(videoSource, {
-    frameRate: input.settings.outputFps,
+    frameRate: input.samplingPlan.effectiveOutputFps,
   });
 
   const sourceInput = new Input({
@@ -80,7 +80,7 @@ async function processWithWebCodecs(input: ProcessInput): Promise<ProcessResult>
   // Mediabunny handles demuxing and MP4 muxing. We still add frames one at a
   // time and await CanvasSource.add so WebCodecs encoder backpressure is honored
   // instead of accumulating decoded frames in memory.
-  if (input.settings.sampling.mode === "nth-frame") {
+  if (input.settings.sampling.mode === "nth-frame" && !input.samplingPlan.isCapped) {
     await encodeEveryNthFrame(input, sampleSink, videoSource, context, outputDimensions);
   } else {
     await encodeFramesAtTimestamps(input, sampleSink, videoSource, context, outputDimensions);
@@ -118,7 +118,7 @@ async function encodeFramesAtTimestamps(
   outputDimensions: { width: number; height: number },
 ): Promise<void> {
   let outputFrameIndex = 0;
-  const outputFrameDuration = 1 / input.settings.outputFps;
+  const outputFrameDuration = input.samplingPlan.outputFrameDurationSeconds;
 
   for await (const maybeSample of sampleSink.samplesAtTimestamps(
     input.samplingPlan.timestampsSeconds,
@@ -134,7 +134,7 @@ async function encodeFramesAtTimestamps(
     maybeSample.close();
 
     await videoSource.add(outputFrameIndex * outputFrameDuration, outputFrameDuration, {
-      keyFrame: outputFrameIndex % input.settings.outputFps === 0,
+      keyFrame: shouldEncodeKeyFrame(outputFrameIndex, input.samplingPlan.effectiveOutputFps),
     });
 
     outputFrameIndex += 1;
@@ -160,7 +160,7 @@ async function encodeEveryNthFrame(
 
   let sourceFrameIndex = 0;
   let outputFrameIndex = 0;
-  const outputFrameDuration = 1 / input.settings.outputFps;
+  const outputFrameDuration = input.samplingPlan.outputFrameDurationSeconds;
 
   for await (const sample of sampleSink.samples()) {
     assertNotAborted(input.signal);
@@ -183,7 +183,7 @@ async function encodeEveryNthFrame(
     sample.close();
 
     await videoSource.add(outputFrameIndex * outputFrameDuration, outputFrameDuration, {
-      keyFrame: outputFrameIndex % input.settings.outputFps === 0,
+      keyFrame: shouldEncodeKeyFrame(outputFrameIndex, input.samplingPlan.effectiveOutputFps),
     });
 
     outputFrameIndex += 1;
@@ -194,4 +194,9 @@ async function encodeEveryNthFrame(
       message: `Encoding output frame ${outputFrameIndex} of ${input.samplingPlan.frameCount}`,
     });
   }
+}
+
+function shouldEncodeKeyFrame(outputFrameIndex: number, effectiveOutputFps: number): boolean {
+  const keyFrameInterval = Math.max(1, Math.round(effectiveOutputFps));
+  return outputFrameIndex % keyFrameInterval === 0;
 }

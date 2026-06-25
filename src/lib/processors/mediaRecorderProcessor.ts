@@ -51,8 +51,8 @@ async function processWithMediaRecorder(input: ProcessInput): Promise<ProcessRes
   canvas.width = outputDimensions.width;
   canvas.height = outputDimensions.height;
   const context = getCanvas2dContext(canvas);
-  const frameDurationMs = 1000 / input.settings.outputFps;
-  const stream = canvas.captureStream(input.settings.outputFps);
+  const frameDurationMs = input.samplingPlan.outputFrameDurationSeconds * 1000;
+  const stream = canvas.captureStream(input.samplingPlan.effectiveOutputFps);
   const recorder = new MediaRecorder(stream, { mimeType: maybeMimeType });
   const chunks: BlobPart[] = [];
 
@@ -104,6 +104,7 @@ async function processWithMediaRecorder(input: ProcessInput): Promise<ProcessRes
     });
 
     recorder.start();
+    await pauseRecorder(recorder, input.signal);
 
     for (let index = 0; index < input.samplingPlan.timestampsSeconds.length; index += 1) {
       assertNotAborted(input.signal);
@@ -119,6 +120,7 @@ async function processWithMediaRecorder(input: ProcessInput): Promise<ProcessRes
       await seekVideo(video, timestamp, input.signal);
       drawVideoContain(context, video, outputDimensions.width, outputDimensions.height);
 
+      await resumeRecorder(recorder, input.signal);
       const maybeVideoTrack = stream.getVideoTracks()[0] as
         | (MediaStreamTrack & { requestFrame?: () => void })
         | undefined;
@@ -134,6 +136,7 @@ async function processWithMediaRecorder(input: ProcessInput): Promise<ProcessRes
       // MediaRecorder timestamps frames in real time. This fallback is slower than
       // WebCodecs, but it preserves playback duration without a heavy wasm encoder.
       await waitForMilliseconds(frameDurationMs, input.signal);
+      await pauseRecorder(recorder, input.signal);
     }
 
     recorder.stop();
@@ -187,6 +190,63 @@ function loadVideoForCanvas(
     video.addEventListener("error", onError, { once: true });
     signal.addEventListener("abort", onAbort, { once: true });
     video.src = objectUrl;
+  });
+}
+
+function pauseRecorder(recorder: MediaRecorder, signal: AbortSignal): Promise<void> {
+  if (recorder.state !== "recording") {
+    return Promise.resolve();
+  }
+
+  return waitForRecorderStateChange(recorder, signal, "pause", () => recorder.pause());
+}
+
+function resumeRecorder(recorder: MediaRecorder, signal: AbortSignal): Promise<void> {
+  if (recorder.state !== "paused") {
+    return Promise.resolve();
+  }
+
+  return waitForRecorderStateChange(recorder, signal, "resume", () => recorder.resume());
+}
+
+function waitForRecorderStateChange(
+  recorder: MediaRecorder,
+  signal: AbortSignal,
+  eventName: "pause" | "resume",
+  changeState: () => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      recorder.removeEventListener(eventName, onStateChange);
+      recorder.removeEventListener("error", onError);
+      signal.removeEventListener("abort", onAbort);
+    };
+
+    const onStateChange = () => {
+      cleanup();
+      resolve();
+    };
+
+    const onError = () => {
+      cleanup();
+      reject(new Error("MediaRecorder failed while changing recording state."));
+    };
+
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException("Processing was canceled.", "AbortError"));
+    };
+
+    recorder.addEventListener(eventName, onStateChange, { once: true });
+    recorder.addEventListener("error", onError, { once: true });
+    signal.addEventListener("abort", onAbort, { once: true });
+
+    try {
+      changeState();
+    } catch (error) {
+      cleanup();
+      reject(error);
+    }
   });
 }
 

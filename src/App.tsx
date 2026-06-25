@@ -18,7 +18,7 @@ import { loadVideoMetadata, type VideoMetadata } from "./lib/videoMetadata";
 import styles from "./App.module.css";
 
 const PREVIEW_MAX_FRAMES = 240;
-const PREVIEW_MAX_SECONDS = 8;
+const PREVIEW_FRAME_BUDGET_SECONDS = 8;
 
 export default function App() {
   const [maybeFile, setMaybeFile] = createSignal<File | null>(null);
@@ -163,12 +163,7 @@ export default function App() {
     const samplingPlan = buildSamplingPlan(
       metadata,
       currentSettings,
-      mode === "preview"
-        ? {
-            maxFrameCount: PREVIEW_MAX_FRAMES,
-            maxOutputDurationSeconds: PREVIEW_MAX_SECONDS,
-          }
-        : {},
+      mode === "preview" ? buildPreviewSamplingOptions(currentSettings) : {},
     );
 
     try {
@@ -189,6 +184,7 @@ export default function App() {
       } else {
         revokeRenderedVideo(maybeExport());
         setMaybeExport(renderedVideo);
+        downloadRenderedVideo(renderedVideo);
       }
     } catch (error) {
       if (!isAbortError(error)) {
@@ -268,7 +264,11 @@ export default function App() {
             maybeError={maybeError()}
             onFileSelected={handleFileSelected}
           />
-          <PreviewPlayer maybePreview={maybePreview()} />
+          <PreviewPlayer
+            maybePreview={maybePreview()}
+            isGeneratingPreview={maybeProcessingMode() === "preview"}
+            maybeProgress={maybeProcessingMode() === "preview" ? maybeProgress() : null}
+          />
         </div>
 
         <div class={styles.secondaryColumn}>
@@ -314,6 +314,26 @@ function revokeRenderedVideo(maybeRenderedVideo: RenderedVideo | null): void {
   if (maybeRenderedVideo) {
     URL.revokeObjectURL(maybeRenderedVideo.url);
   }
+}
+
+function buildPreviewSamplingOptions(settings: TimelapseSettings): { maxFrameCount: number } {
+  return {
+    maxFrameCount: Math.min(
+      PREVIEW_MAX_FRAMES,
+      Math.floor(PREVIEW_FRAME_BUDGET_SECONDS * settings.outputFps),
+    ),
+  };
+}
+
+function downloadRenderedVideo(renderedVideo: RenderedVideo): void {
+  const link = document.createElement("a");
+  link.href = renderedVideo.url;
+  link.download = renderedVideo.fileName;
+  link.style.display = "none";
+
+  document.body.append(link);
+  link.click();
+  link.remove();
 }
 
 function isAbortError(error: unknown): boolean {
