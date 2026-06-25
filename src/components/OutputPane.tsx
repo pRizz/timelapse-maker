@@ -129,7 +129,19 @@ function OutputContent(props: {
               Updating output.
             </div>
           </Show>
-          <video class={styles.video} src={output().url} controls playsinline />
+          <Show
+            when={output().canPreview}
+            fallback={
+              <div class={styles.previewFallback} role="status">
+                This browser cannot preview the finished MP4 here. Use Download to save the same
+                output file.
+              </div>
+            }
+          >
+            <video class={styles.video} controls playsinline>
+              <source src={output().url} type={output().mimeType} />
+            </video>
+          </Show>
           <dl class={styles.outputMeta}>
             <div>
               <dt>File</dt>

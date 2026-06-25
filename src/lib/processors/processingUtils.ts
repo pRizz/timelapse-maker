@@ -8,7 +8,7 @@ export function assertNotAborted(signal: AbortSignal): void {
 
 export function createOutputFileName(
   sourceName: string,
-  extension: "mp4" | "webm",
+  extension: "mp4",
   mode: "preview" | "export",
 ): string {
   const cleanBaseName = sourceName.replace(/\.[^.]+$/, "").replace(/[^a-z0-9-_]+/gi, "-");
@@ -64,6 +64,79 @@ export function drawVideoContain(
   const drawY = (height - drawHeight) / 2;
 
   context.drawImage(video, drawX, drawY, drawWidth, drawHeight);
+}
+
+export function loadVideoForCanvas(
+  video: HTMLVideoElement,
+  objectUrl: string,
+  signal: AbortSignal,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      video.removeEventListener("loadeddata", onLoadedData);
+      video.removeEventListener("error", onError);
+      signal.removeEventListener("abort", onAbort);
+    };
+
+    const onLoadedData = () => {
+      cleanup();
+      resolve();
+    };
+
+    const onError = () => {
+      cleanup();
+      reject(new Error("The browser could not decode this video for canvas processing."));
+    };
+
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException("Processing was canceled.", "AbortError"));
+    };
+
+    video.addEventListener("loadeddata", onLoadedData, { once: true });
+    video.addEventListener("error", onError, { once: true });
+    signal.addEventListener("abort", onAbort, { once: true });
+    video.src = objectUrl;
+  });
+}
+
+export function seekVideo(
+  video: HTMLVideoElement,
+  timestampSeconds: number,
+  signal: AbortSignal,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (Math.abs(video.currentTime - timestampSeconds) < 0.01 && video.readyState >= 2) {
+      resolve();
+      return;
+    }
+
+    const cleanup = () => {
+      video.removeEventListener("seeked", onSeeked);
+      video.removeEventListener("error", onError);
+      signal.removeEventListener("abort", onAbort);
+    };
+
+    const onSeeked = () => {
+      cleanup();
+      resolve();
+    };
+
+    const onError = () => {
+      cleanup();
+      reject(new Error("The browser failed while seeking the source video."));
+    };
+
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException("Processing was canceled.", "AbortError"));
+    };
+
+    video.addEventListener("seeked", onSeeked, { once: true });
+    video.addEventListener("error", onError, { once: true });
+    signal.addEventListener("abort", onAbort, { once: true });
+    video.currentTime = Math.max(0, timestampSeconds);
+  });
 }
 
 export function waitForMilliseconds(milliseconds: number, signal: AbortSignal): Promise<void> {

@@ -1,18 +1,35 @@
 import type { TimelapseSettings, ValidationCapabilities } from "../timelapseSettings";
 import type { VideoMetadata } from "../videoMetadata";
-import { mediaRecorderProcessor, maybeFirstSupportedMediaRecorderMimeType } from "./mediaRecorderProcessor";
+import { mediaRecorderProcessor } from "./mediaRecorderProcessor";
+import {
+  canBrowserPreviewH264Mp4,
+  canUseFfmpegWasm,
+  chooseOutputFormatProfile,
+  H264_BASELINE_CODEC_STRING,
+  H264_HIGH_CODEC_STRING,
+  maybeFirstSupportedMediaRecorderMp4MimeType,
+  MP4_MIME_TYPE,
+} from "./outputCompatibility";
 import type { Processor, ProcessorSelection } from "./types";
 
 export type BrowserProcessorCapabilities = {
   hasWebCodecs: boolean;
   canEncodeMp4WithWebCodecs: boolean;
-  maybeMediaRecorderMimeType: string | null;
+  maybeMediaRecorderMp4MimeType: string | null;
+  canPreviewH264Mp4: boolean;
+  canUseFfmpegWasm: boolean;
 };
 
 export function chooseProcessor(
   capabilities: BrowserProcessorCapabilities,
 ): ProcessorSelection {
-  if (capabilities.hasWebCodecs && capabilities.canEncodeMp4WithWebCodecs) {
+  const outputProfile = chooseOutputFormatProfile(capabilities);
+
+  if (
+    outputProfile.id === "mp4-h264-native" &&
+    capabilities.hasWebCodecs &&
+    capabilities.canEncodeMp4WithWebCodecs
+  ) {
     return {
       processor: lazyWebCodecsProcessor,
       support: {
@@ -22,33 +39,47 @@ export function chooseProcessor(
         supportsExactFrameSampling: true,
         outputMimeType: lazyWebCodecsProcessor.outputMimeType,
         fileExtension: lazyWebCodecsProcessor.fileExtension,
+        outputFormatProfile: outputProfile.id,
         warnings: [],
         errors: [],
       },
     };
   }
 
-  if (capabilities.maybeMediaRecorderMimeType) {
+  if (outputProfile.id === "mp4-h264-native" && capabilities.maybeMediaRecorderMp4MimeType) {
     return {
       processor: {
         ...mediaRecorderProcessor,
-        outputMimeType: capabilities.maybeMediaRecorderMimeType,
-        fileExtension: capabilities.maybeMediaRecorderMimeType.startsWith("video/mp4")
-          ? "mp4"
-          : "webm",
+        outputMimeType: capabilities.maybeMediaRecorderMp4MimeType,
       },
       support: {
         id: "media-recorder",
         label: mediaRecorderProcessor.label,
         available: true,
         supportsExactFrameSampling: false,
-        outputMimeType: capabilities.maybeMediaRecorderMimeType,
-        fileExtension: capabilities.maybeMediaRecorderMimeType.startsWith("video/mp4")
-          ? "mp4"
-          : "webm",
+        outputMimeType: capabilities.maybeMediaRecorderMp4MimeType,
+        fileExtension: "mp4",
+        outputFormatProfile: outputProfile.id,
         warnings: [
-          "Using the fallback renderer. Export runs closer to real time and may save as WebM.",
+          "Using the fallback renderer. Export runs closer to real time.",
         ],
+        errors: [],
+      },
+    };
+  }
+
+  if (outputProfile.id === "mp4-h264-wasm") {
+    return {
+      processor: lazyFfmpegWasmProcessor,
+      support: {
+        id: "ffmpeg-wasm",
+        label: lazyFfmpegWasmProcessor.label,
+        available: true,
+        supportsExactFrameSampling: false,
+        outputMimeType: MP4_MIME_TYPE,
+        fileExtension: "mp4",
+        outputFormatProfile: outputProfile.id,
+        warnings: outputProfile.warnings,
         errors: [],
       },
     };
@@ -57,14 +88,15 @@ export function chooseProcessor(
   return {
     processor: null,
     support: {
-      id: "media-recorder",
-      label: "No browser encoder available",
+      id: "unsupported",
+      label: "No compatible encoder available",
       available: false,
       supportsExactFrameSampling: false,
       outputMimeType: null,
       fileExtension: null,
+      outputFormatProfile: outputProfile.id,
       warnings: [],
-      errors: ["This browser does not expose WebCodecs MP4 encoding or MediaRecorder export."],
+      errors: outputProfile.errors,
     },
   };
 }
@@ -92,8 +124,6 @@ export function toValidationCapabilities(selection: ProcessorSelection): Validat
   return {
     hasUsableProcessor: selection.processor !== null,
     supportsExactFrameSampling: selection.support.supportsExactFrameSampling,
-    maybeFallbackMimeType:
-      selection.support.id === "media-recorder" ? selection.support.outputMimeType : null,
   };
 }
 
@@ -108,14 +138,28 @@ async function detectBrowserProcessorCapabilities(
   return {
     hasWebCodecs,
     canEncodeMp4WithWebCodecs,
-    maybeMediaRecorderMimeType: maybeFirstSupportedMediaRecorderMimeType(),
+    maybeMediaRecorderMp4MimeType: maybeFirstSupportedMediaRecorderMp4MimeType(),
+    canPreviewH264Mp4: canBrowserPreviewH264Mp4(),
+    canUseFfmpegWasm: canUseFfmpegWasm(),
   };
 }
 
 async function canEncodeH264Mp4(width: number, height: number): Promise<boolean> {
+  if (await canEncodeH264CodecString(H264_HIGH_CODEC_STRING, width, height)) {
+    return true;
+  }
+
+  return canEncodeH264CodecString(H264_BASELINE_CODEC_STRING, width, height);
+}
+
+async function canEncodeH264CodecString(
+  codec: string,
+  width: number,
+  height: number,
+): Promise<boolean> {
   try {
     const support = await VideoEncoder.isConfigSupported({
-      codec: "avc1.42E01E",
+      codec,
       width,
       height,
       bitrate: Math.max(1_000_000, width * height * 4),
@@ -128,3 +172,15 @@ async function canEncodeH264Mp4(width: number, height: number): Promise<boolean>
     return false;
   }
 }
+
+const lazyFfmpegWasmProcessor: Processor = {
+  id: "ffmpeg-wasm",
+  label: "ffmpeg.wasm MP4",
+  supportsExactFrameSampling: false,
+  outputMimeType: MP4_MIME_TYPE,
+  fileExtension: "mp4",
+  process: async (input) => {
+    const { ffmpegWasmProcessor } = await import("./ffmpegWasmProcessor");
+    return ffmpegWasmProcessor.process(input);
+  },
+};

@@ -7,6 +7,7 @@ import type { VideoMetadata } from "./lib/videoMetadata";
 
 const mocks = vi.hoisted(() => ({
   loadVideoMetadata: vi.fn(),
+  probeVideoUrlPreviewability: vi.fn(),
   process: vi.fn(),
   selectProcessor: vi.fn(),
 }));
@@ -20,13 +21,20 @@ vi.mock("./lib/videoMetadata", () => ({
   loadVideoMetadata: mocks.loadVideoMetadata,
 }));
 
+vi.mock("./lib/processors/outputCompatibility", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./lib/processors/outputCompatibility")>();
+
+  return {
+    ...actual,
+    probeVideoUrlPreviewability: mocks.probeVideoUrlPreviewability,
+  };
+});
+
 vi.mock("./lib/processors/selectProcessor", () => ({
   selectProcessor: mocks.selectProcessor,
   toValidationCapabilities: (selection: ProcessorSelection) => ({
     hasUsableProcessor: selection.processor !== null,
     supportsExactFrameSampling: selection.support.supportsExactFrameSampling,
-    maybeFallbackMimeType:
-      selection.support.id === "media-recorder" ? selection.support.outputMimeType : null,
   }),
 }));
 
@@ -58,6 +66,7 @@ const processorSelection: ProcessorSelection = {
     supportsExactFrameSampling: true,
     outputMimeType: "video/mp4",
     fileExtension: "mp4",
+    outputFormatProfile: "mp4-h264-native",
     warnings: [],
     errors: [],
   },
@@ -65,6 +74,7 @@ const processorSelection: ProcessorSelection = {
 
 beforeEach(() => {
   mocks.loadVideoMetadata.mockResolvedValue(baseMetadata);
+  mocks.probeVideoUrlPreviewability.mockResolvedValue(true);
   mocks.selectProcessor.mockResolvedValue(processorSelection);
   mocks.process.mockImplementation(async (input: ProcessInput) => buildProcessResult(input));
 
@@ -152,7 +162,12 @@ describe("App", () => {
     expect(processInput.samplingPlan.outputFrameDurationSeconds).toBeCloseTo(1 / 60);
     expect(processInput.samplingPlan.isCapped).toBe(false);
     await waitFor(() =>
-      expect(baseElement.querySelector("video")?.getAttribute("src")).toBe("blob:output"),
+      expect(baseElement.querySelector("source")?.getAttribute("src")).toBe("blob:output"),
+    );
+    expect(mocks.probeVideoUrlPreviewability).toHaveBeenCalledWith(
+      "blob:output",
+      "video/mp4",
+      expect.any(AbortSignal),
     );
     expect(clickSpy).toHaveBeenCalledTimes(1);
     expect(baseElement.querySelector('a[download="source-timelapse.mp4"]')).not.toBeNull();
@@ -192,7 +207,7 @@ describe("App", () => {
     expect(getByText("Processing frame 12 / 240")).toBeInTheDocument();
     deferred.resolve();
     await waitFor(() =>
-      expect(baseElement.querySelector("video")?.getAttribute("src")).toBe("blob:output"),
+      expect(baseElement.querySelector("source")?.getAttribute("src")).toBe("blob:output"),
     );
   });
 
@@ -229,7 +244,7 @@ describe("App", () => {
     );
     deferred.resolve();
     await waitFor(() =>
-      expect(baseElement.querySelector("video")?.getAttribute("src")).toBe("blob:output"),
+      expect(baseElement.querySelector("source")?.getAttribute("src")).toBe("blob:output"),
     );
   });
 
@@ -260,7 +275,7 @@ describe("App", () => {
     expect(scrollIntoView).not.toHaveBeenCalled();
     deferred.resolve();
     await waitFor(() =>
-      expect(baseElement.querySelector("video")?.getAttribute("src")).toBe("blob:output"),
+      expect(baseElement.querySelector("source")?.getAttribute("src")).toBe("blob:output"),
     );
   });
 
@@ -297,14 +312,14 @@ describe("App", () => {
     );
     deferred.resolve();
     await waitFor(() =>
-      expect(baseElement.querySelector("video")?.getAttribute("src")).toBe("blob:output"),
+      expect(baseElement.querySelector("source")?.getAttribute("src")).toBe("blob:output"),
     );
   });
 
   it("marks output stale after settings change and waits for manual re-export", async () => {
     // Arrange
     const file = new File(["video"], "source.mp4", { type: "video/mp4" });
-    const { getByRole, getByText, queryByText } = render(() => <App />);
+    const { baseElement, getByRole, getByText, queryByText } = render(() => <App />);
     const dropZone = getByText("Drop an iPhone, MP4, or MOV video").closest("label");
 
     fireEvent.drop(dropZone!, {
@@ -315,6 +330,9 @@ describe("App", () => {
       },
     });
     await waitFor(() => expect(mocks.process).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(baseElement.querySelector("source")?.getAttribute("src")).toBe("blob:output"),
+    );
 
     // Act
     fireEvent.click(getByRole("button", { name: "10x" }));
@@ -381,7 +399,7 @@ describe("App", () => {
     // Assert
     await waitFor(() => expect(mocks.process).toHaveBeenCalledTimes(2));
     await waitFor(() =>
-      expect(baseElement.querySelector("video")?.getAttribute("src")).toBe("blob:output"),
+      expect(baseElement.querySelector("source")?.getAttribute("src")).toBe("blob:output"),
     );
   });
 });

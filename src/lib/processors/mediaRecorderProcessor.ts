@@ -6,45 +6,28 @@ import {
   emitProgress,
   formatProcessingFrameMessage,
   getCanvas2dContext,
+  loadVideoForCanvas,
+  seekVideo,
   waitForMilliseconds,
 } from "./processingUtils";
+import { maybeFirstSupportedMediaRecorderMp4MimeType } from "./outputCompatibility";
 import type { ProcessInput, ProcessResult, Processor } from "./types";
-
-const MEDIA_RECORDER_MIME_CANDIDATES = [
-  'video/mp4;codecs="avc1.42E01E"',
-  "video/mp4",
-  "video/webm;codecs=vp9",
-  "video/webm;codecs=vp8",
-  "video/webm",
-] as const;
 
 export const mediaRecorderProcessor: Processor = {
   id: "media-recorder",
-  label: "Canvas + MediaRecorder",
+  label: "Canvas + MediaRecorder MP4",
   supportsExactFrameSampling: false,
-  outputMimeType: "video/webm",
-  fileExtension: "webm",
+  outputMimeType: "video/mp4",
+  fileExtension: "mp4",
   process: processWithMediaRecorder,
 };
-
-export function maybeFirstSupportedMediaRecorderMimeType(): string | null {
-  if (!("MediaRecorder" in globalThis)) {
-    return null;
-  }
-
-  return (
-    MEDIA_RECORDER_MIME_CANDIDATES.find((mimeType) =>
-      MediaRecorder.isTypeSupported(mimeType),
-    ) ?? null
-  );
-}
 
 async function processWithMediaRecorder(input: ProcessInput): Promise<ProcessResult> {
   assertNotAborted(input.signal);
 
-  const maybeMimeType = maybeFirstSupportedMediaRecorderMimeType();
+  const maybeMimeType = maybeFirstSupportedMediaRecorderMp4MimeType();
   if (!maybeMimeType) {
-    throw new Error("MediaRecorder cannot export MP4 or WebM video in this browser.");
+    throw new Error("MediaRecorder cannot export H.264 MP4 video in this browser.");
   }
 
   const outputDimensions = resolveOutputDimensions(input.metadata, input.settings.resolution);
@@ -54,7 +37,13 @@ async function processWithMediaRecorder(input: ProcessInput): Promise<ProcessRes
   const context = getCanvas2dContext(canvas);
   const frameDurationMs = input.samplingPlan.outputFrameDurationSeconds * 1000;
   const stream = canvas.captureStream(input.samplingPlan.effectiveOutputFps);
-  const recorder = new MediaRecorder(stream, { mimeType: maybeMimeType });
+  const recorder = new MediaRecorder(stream, {
+    mimeType: maybeMimeType,
+    videoBitsPerSecond: calculateMediaRecorderVideoBitsPerSecond(
+      outputDimensions,
+      input.samplingPlan.effectiveOutputFps,
+    ),
+  });
   const chunks: BlobPart[] = [];
 
   const objectUrl = URL.createObjectURL(input.file);
@@ -142,56 +131,19 @@ async function processWithMediaRecorder(input: ProcessInput): Promise<ProcessRes
 
     recorder.stop();
     const blob = await recorded;
-    const fileExtension = maybeMimeType.startsWith("video/mp4") ? "mp4" : "webm";
 
     return {
       blob,
       mimeType: maybeMimeType,
-      fileName: createOutputFileName(input.metadata.fileName, fileExtension, input.mode),
+      fileName: createOutputFileName(input.metadata.fileName, "mp4", input.mode),
       durationSeconds: input.samplingPlan.estimatedOutputDurationSeconds,
       frameCount: input.samplingPlan.frameCount,
-      warnings: maybeMimeType.startsWith("video/mp4")
-        ? []
-        : ["Downloaded fallback output is WebM because MP4 recording is unavailable."],
+      warnings: [],
     };
   } finally {
     URL.revokeObjectURL(objectUrl);
     stream.getTracks().forEach((track) => track.stop());
   }
-}
-
-function loadVideoForCanvas(
-  video: HTMLVideoElement,
-  objectUrl: string,
-  signal: AbortSignal,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const cleanup = () => {
-      video.removeEventListener("loadeddata", onLoadedData);
-      video.removeEventListener("error", onError);
-      signal.removeEventListener("abort", onAbort);
-    };
-
-    const onLoadedData = () => {
-      cleanup();
-      resolve();
-    };
-
-    const onError = () => {
-      cleanup();
-      reject(new Error("The browser could not decode this video for canvas processing."));
-    };
-
-    const onAbort = () => {
-      cleanup();
-      reject(new DOMException("Processing was canceled.", "AbortError"));
-    };
-
-    video.addEventListener("loadeddata", onLoadedData, { once: true });
-    video.addEventListener("error", onError, { once: true });
-    signal.addEventListener("abort", onAbort, { once: true });
-    video.src = objectUrl;
-  });
 }
 
 function pauseRecorder(recorder: MediaRecorder, signal: AbortSignal): Promise<void> {
@@ -251,41 +203,12 @@ function waitForRecorderStateChange(
   });
 }
 
-function seekVideo(
-  video: HTMLVideoElement,
-  timestampSeconds: number,
-  signal: AbortSignal,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (Math.abs(video.currentTime - timestampSeconds) < 0.01 && video.readyState >= 2) {
-      resolve();
-      return;
-    }
+export function calculateMediaRecorderVideoBitsPerSecond(
+  dimensions: { width: number; height: number },
+  outputFps: number,
+): number {
+  const pixelsPerSecond = dimensions.width * dimensions.height * outputFps;
+  const targetBitrate = Math.round(pixelsPerSecond * 0.14);
 
-    const cleanup = () => {
-      video.removeEventListener("seeked", onSeeked);
-      video.removeEventListener("error", onError);
-      signal.removeEventListener("abort", onAbort);
-    };
-
-    const onSeeked = () => {
-      cleanup();
-      resolve();
-    };
-
-    const onError = () => {
-      cleanup();
-      reject(new Error("The browser failed while seeking the source video."));
-    };
-
-    const onAbort = () => {
-      cleanup();
-      reject(new DOMException("Processing was canceled.", "AbortError"));
-    };
-
-    video.addEventListener("seeked", onSeeked, { once: true });
-    video.addEventListener("error", onError, { once: true });
-    signal.addEventListener("abort", onAbort, { once: true });
-    video.currentTime = Math.max(0, timestampSeconds);
-  });
+  return Math.min(50_000_000, Math.max(2_000_000, targetBitrate));
 }

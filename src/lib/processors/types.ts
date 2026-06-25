@@ -2,7 +2,11 @@ import type { SamplingPlan, TimelapseSettings } from "../timelapseSettings";
 import type { VideoMetadata } from "../videoMetadata";
 
 export type ProcessingMode = "preview" | "export";
-export type ProcessorId = "webcodecs" | "media-recorder";
+export type ProcessorId = "webcodecs" | "media-recorder" | "ffmpeg-wasm";
+export type OutputFormatProfileId =
+  | "mp4-h264-native"
+  | "mp4-h264-wasm"
+  | "unsupported";
 
 export type ProcessingProgress = {
   stage: "preparing" | "decoding" | "encoding" | "muxing" | "finalizing";
@@ -35,17 +39,18 @@ export type Processor = {
   label: string;
   supportsExactFrameSampling: boolean;
   outputMimeType: string;
-  fileExtension: "mp4" | "webm";
+  fileExtension: "mp4";
   process: (input: ProcessInput) => Promise<ProcessResult>;
 };
 
 export type ProcessorSupport = {
-  id: ProcessorId;
+  id: ProcessorId | "unsupported";
   label: string;
   available: boolean;
   supportsExactFrameSampling: boolean;
   outputMimeType: string | null;
-  fileExtension: "mp4" | "webm" | null;
+  fileExtension: "mp4" | null;
+  outputFormatProfile: OutputFormatProfileId;
   warnings: string[];
   errors: string[];
 };

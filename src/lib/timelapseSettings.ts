@@ -62,7 +62,6 @@ export type SamplingPlanOptions = {
 export type ValidationCapabilities = {
   hasUsableProcessor: boolean;
   supportsExactFrameSampling: boolean;
-  maybeFallbackMimeType?: string | null;
 };
 
 export type ValidationResult = {
@@ -215,10 +214,6 @@ export function validateSettings(
 
   if (capabilities && !capabilities.hasUsableProcessor) {
     errors.push("No browser export processor is available for this video and settings.");
-  }
-
-  if (capabilities?.maybeFallbackMimeType?.startsWith("video/webm")) {
-    warnings.push("Fallback export will download as WebM because MP4 recording is unavailable.");
   }
 
   return {

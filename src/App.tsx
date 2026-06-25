@@ -4,6 +4,7 @@ import { OutputPane } from "./components/OutputPane";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { VideoUploader } from "./components/VideoUploader";
 import type { RenderedVideo } from "./lib/renderedVideo";
+import { probeVideoUrlPreviewability } from "./lib/processors/outputCompatibility";
 import type { ProcessingProgress, ProcessResult } from "./lib/processors/types";
 import { selectProcessor, toValidationCapabilities } from "./lib/processors/selectProcessor";
 import type { ProcessorSelection } from "./lib/processors/types";
@@ -239,7 +240,7 @@ export default function App() {
         signal: abortController.signal,
         onProgress: setMaybeProgress,
       });
-      const renderedVideo = toRenderedVideo(result);
+      const renderedVideo = await toRenderedVideo(result, abortController.signal);
 
       revokeRenderedVideo(maybeOutput());
       setMaybeOutput(renderedVideo);
@@ -366,15 +367,25 @@ export default function App() {
   );
 }
 
-function toRenderedVideo(result: ProcessResult): RenderedVideo {
-  return {
-    url: URL.createObjectURL(result.blob),
-    fileName: result.fileName,
-    mimeType: result.mimeType,
-    durationSeconds: result.durationSeconds,
-    frameCount: result.frameCount,
-    warnings: result.warnings,
-  };
+async function toRenderedVideo(result: ProcessResult, signal: AbortSignal): Promise<RenderedVideo> {
+  const url = URL.createObjectURL(result.blob);
+
+  try {
+    const canPreview = await probeVideoUrlPreviewability(url, result.mimeType, signal);
+
+    return {
+      url,
+      fileName: result.fileName,
+      mimeType: result.mimeType,
+      durationSeconds: result.durationSeconds,
+      frameCount: result.frameCount,
+      warnings: result.warnings,
+      canPreview,
+    };
+  } catch (error) {
+    URL.revokeObjectURL(url);
+    throw error;
+  }
 }
 
 function revokeRenderedVideo(maybeRenderedVideo: RenderedVideo | null): void {

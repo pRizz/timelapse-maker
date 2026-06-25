@@ -63,25 +63,32 @@ static assets are cached so the converter can reopen offline at the same URL.
 
 Offline support does not store uploaded source videos or rendered timelapse
 outputs. Selected videos stay in the active browser session, and exported files
-are still downloaded through the browser.
+are still downloaded through the browser. The optional `ffmpeg.wasm` encoder is
+loaded on demand and may need a network connection the first time that fallback
+is used.
 
 ## Privacy
 
 Your video stays on your device. The app uses browser `File`, object URL,
-canvas, WebCodecs, MediaRecorder, and WebAssembly-free JavaScript APIs. There is
-no backend, no upload step, and no telemetry.
+canvas, WebCodecs, MediaRecorder, and an optional `ffmpeg.wasm` fallback when
+native browser encoders cannot create previewable MP4 output. There is no
+backend, no upload step, and no telemetry.
 
 ## Browser Compatibility
 
-The app prefers a WebCodecs + Mediabunny processing path for MP4 output. When
-that is unavailable, it falls back to drawing frames through canvas and encoding
-with MediaRecorder. Browser support differs:
+The app prefers a WebCodecs + Mediabunny processing path for H.264 MP4 output.
+When that is unavailable, it falls back to drawing frames through canvas and
+encoding H.264 MP4 with MediaRecorder. If native browser APIs cannot produce a
+previewable MP4, the app lazy-loads `ffmpeg.wasm` and encodes the same sampled
+frames to H.264 MP4 locally. Browser support differs:
 
 - Chrome and Chromium-based browsers generally provide the broadest WebCodecs
-  and MediaRecorder support.
+  and MediaRecorder support. Chrome on iPhone uses iOS/WebKit media
+  capabilities, so the compatible MP4 path matters there.
 - Safari support depends on macOS/iOS codec capabilities, especially for iPhone
   HEVC/H.265 and MOV files.
-- Firefox may use the MediaRecorder fallback and may export WebM instead of MP4.
+- Browsers without native MP4 encoding may use the slower `ffmpeg.wasm` fallback
+  instead of exporting WebM.
 
 The UI detects available processors and shows warnings when the selected video
 or settings may not work in the current browser.
@@ -99,8 +106,6 @@ or settings may not work in the current browser.
 
 ## Future Improvements
 
-- Optional isolated `ffmpeg.wasm` adapter for browsers that cannot decode or
-  encode a needed format natively.
 - Audio speed-up and muxing pipeline.
 - Batch conversion.
 - Resumable or chunked processing for very large videos.

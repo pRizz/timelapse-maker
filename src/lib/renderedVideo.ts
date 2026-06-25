@@ -5,4 +5,5 @@ export type RenderedVideo = {
   durationSeconds: number;
   frameCount: number;
   warnings: string[];
+  canPreview: boolean;
 };
