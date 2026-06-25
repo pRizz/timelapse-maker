@@ -334,6 +334,7 @@ export default function App() {
           />
           <OutputPane
             maybeOutput={maybeOutput()}
+            hasSourceVideo={maybeFile() !== null}
             canProcess={canProcess()}
             errors={exportErrors()}
             warnings={[...validation().warnings, ...(maybeOutput()?.warnings ?? [])]}

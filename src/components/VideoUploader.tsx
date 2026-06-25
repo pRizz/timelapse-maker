@@ -1,4 +1,4 @@
-import type { JSX } from "solid-js";
+import { For, Show, createMemo, type JSX } from "solid-js";
 import type { VideoMetadata } from "../lib/videoMetadata";
 import { formatBytes, formatDuration, formatFps, formatResolution } from "../lib/formatters";
 import styles from "./VideoUploader.module.css";
@@ -58,25 +58,79 @@ export function VideoUploader(props: VideoUploaderProps) {
       {props.maybeError ? <p class={styles.error}>{props.maybeError}</p> : null}
 
       {props.maybeMetadata ? (
-        <dl class={styles.metadataGrid} aria-label="Video metadata">
-          <div>
-            <dt>Duration</dt>
-            <dd>{formatDuration(props.maybeMetadata.durationSeconds)}</dd>
-          </div>
-          <div>
-            <dt>Resolution</dt>
-            <dd>{formatResolution(props.maybeMetadata.width, props.maybeMetadata.height)}</dd>
-          </div>
-          <div>
-            <dt>Estimated FPS</dt>
-            <dd>{formatFps(props.maybeMetadata.maybeEstimatedFps)}</dd>
-          </div>
-          <div>
-            <dt>File size</dt>
-            <dd>{formatBytes(props.maybeMetadata.fileSizeBytes)}</dd>
-          </div>
-        </dl>
+        <MetadataGrid metadata={props.maybeMetadata} />
       ) : null}
     </section>
   );
+}
+
+type MetadataRow = {
+  label: string;
+  value: string;
+};
+
+function MetadataGrid(props: { metadata: VideoMetadata }) {
+  const rows = createMemo(() =>
+    [
+      maybeMetadataRow("Duration", maybeFormatDuration(props.metadata.durationSeconds)),
+      maybeMetadataRow("Resolution", maybeFormatResolution(props.metadata.width, props.metadata.height)),
+      maybeMetadataRow("Estimated FPS", maybeFormatFps(props.metadata.maybeEstimatedFps)),
+      maybeMetadataRow("File size", maybeFormatBytes(props.metadata.fileSizeBytes)),
+    ].filter((maybeRow): maybeRow is MetadataRow => maybeRow !== null),
+  );
+
+  return (
+    <Show when={rows().length > 0}>
+      <dl class={styles.metadataGrid} aria-label="Video metadata">
+        <For each={rows()}>
+          {(row) => (
+            <div>
+              <dt>{row.label}</dt>
+              <dd>{row.value}</dd>
+            </div>
+          )}
+        </For>
+      </dl>
+    </Show>
+  );
+}
+
+function maybeMetadataRow(label: string, maybeValue: string | null): MetadataRow | null {
+  if (!maybeValue) {
+    return null;
+  }
+
+  return { label, value: maybeValue };
+}
+
+function maybeFormatBytes(bytes: number): string | null {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return null;
+  }
+
+  return formatBytes(bytes);
+}
+
+function maybeFormatDuration(seconds: number): string | null {
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return null;
+  }
+
+  return formatDuration(seconds);
+}
+
+function maybeFormatFps(maybeFps: number | null | undefined): string | null {
+  if (!maybeFps || !Number.isFinite(maybeFps)) {
+    return null;
+  }
+
+  return formatFps(maybeFps);
+}
+
+function maybeFormatResolution(width: number, height: number): string | null {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return null;
+  }
+
+  return formatResolution(width, height);
 }

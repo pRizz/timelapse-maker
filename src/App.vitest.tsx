@@ -115,8 +115,11 @@ describe("App", () => {
     expect(text).toContain("Timelapse Maker");
     expect(text).toContain("Your video stays on your device");
     expect(text).toContain("Output");
+    expect(text).toContain("Choose a video to get started.");
+    expect(text).toContain("Choose a video to enable timelapse settings.");
     expect(text).not.toContain("Preview");
     expect(text).not.toContain("Generate preview");
+    expect(text).not.toContain("Processor: Unavailable");
     expect(text).not.toContain("Client-side video utility");
     expect(text).not.toContain("Copy build info");
     expect(getByRole("heading", { name: "Output" })).toBeInTheDocument();

@@ -6,6 +6,7 @@ import styles from "./OutputPane.module.css";
 
 type OutputPaneProps = {
   maybeOutput: RenderedVideo | null;
+  hasSourceVideo: boolean;
   canProcess: boolean;
   errors: string[];
   warnings: string[];
@@ -47,10 +48,11 @@ export function OutputPane(props: OutputPaneProps) {
     >
       <div class={styles.heading}>
         <h2 id="output-title">Output</h2>
-        <p>
-          Processor:{" "}
-          <strong>{props.processorSupport?.available ? props.processorSupport.label : "Unavailable"}</strong>
-        </p>
+        <Show when={props.processorSupport?.available}>
+          <p>
+            Processor: <strong>{props.processorSupport?.label}</strong>
+          </p>
+        </Show>
       </div>
 
       <div class={styles.actions}>
@@ -79,6 +81,7 @@ export function OutputPane(props: OutputPaneProps) {
 
       <OutputContent
         maybeOutput={props.maybeOutput}
+        hasSourceVideo={props.hasSourceVideo}
         isExporting={props.isExporting}
         isOutputStale={props.isOutputStale}
       />
@@ -103,18 +106,27 @@ export function OutputPane(props: OutputPaneProps) {
 
 function OutputContent(props: {
   maybeOutput: RenderedVideo | null;
+  hasSourceVideo: boolean;
   isExporting: boolean;
   isOutputStale: boolean;
 }) {
+  const emptyStateMessage = () => {
+    if (props.isExporting) {
+      return "Output will appear here when export finishes.";
+    }
+
+    if (!props.hasSourceVideo) {
+      return "Choose a video to get started.";
+    }
+
+    return "Output will appear here after export.";
+  };
+
   return (
     <Show
       when={props.maybeOutput}
       fallback={
-        <div class={styles.emptyState}>
-          {props.isExporting
-            ? "Output will appear here when export finishes."
-            : "Drop a video to start the full export."}
-        </div>
+        <div class={styles.emptyState}>{emptyStateMessage()}</div>
       }
     >
       {(output) => (

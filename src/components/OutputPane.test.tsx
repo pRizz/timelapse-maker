@@ -21,6 +21,61 @@ afterEach(() => {
 });
 
 describe("OutputPane", () => {
+  it("shows a gentle empty state before a source video is selected", () => {
+    // Arrange
+    // Act
+    const { baseElement, getByText } = render(() =>
+      renderOutputPane(null, {
+        hasSourceVideo: false,
+        canProcess: false,
+        processorSupport: null,
+      }),
+    );
+
+    // Assert
+    expect(getByText("Choose a video to get started.")).toBeInTheDocument();
+    expect(baseElement.textContent ?? "").not.toContain("Processor:");
+    expect(baseElement.textContent ?? "").not.toContain("Unavailable");
+  });
+
+  it("omits the processor line when processor support is unavailable", () => {
+    // Arrange
+    const unsupportedProcessorSupport: ProcessorSupport = {
+      ...processorSupport,
+      id: "unsupported",
+      label: "Unsupported",
+      available: false,
+      supportsExactFrameSampling: false,
+      outputMimeType: null,
+      fileExtension: null,
+      outputFormatProfile: "unsupported",
+      errors: ["No browser export processor is available."],
+    };
+
+    // Act
+    const { baseElement, getByText } = render(() =>
+      renderOutputPane(null, {
+        hasSourceVideo: true,
+        processorSupport: unsupportedProcessorSupport,
+      }),
+    );
+
+    // Assert
+    expect(getByText("No browser export processor is available.")).toBeInTheDocument();
+    expect(baseElement.textContent ?? "").not.toContain("Processor:");
+    expect(baseElement.textContent ?? "").not.toContain("Unavailable");
+  });
+
+  it("shows the processor line when processor support is available", () => {
+    // Arrange
+    // Act
+    const { getByText } = render(() => renderOutputPane(null));
+
+    // Assert
+    expect(getByText("Processor:")).toBeInTheDocument();
+    expect(getByText("WebCodecs MP4")).toBeInTheDocument();
+  });
+
   it("renders a typed video source when the output is previewable", () => {
     // Arrange
     const output = buildRenderedVideo({ canPreview: true });
@@ -49,15 +104,26 @@ describe("OutputPane", () => {
   });
 });
 
-function renderOutputPane(output: RenderedVideo) {
+function renderOutputPane(
+  maybeOutput: RenderedVideo | null,
+  options: {
+    hasSourceVideo?: boolean;
+    canProcess?: boolean;
+    processorSupport?: ProcessorSupport | null;
+  } = {},
+) {
+  const resolvedProcessorSupport =
+    options.processorSupport === undefined ? processorSupport : options.processorSupport;
+
   return (
     <OutputPane
-      maybeOutput={output}
-      canProcess={true}
+      maybeOutput={maybeOutput}
+      hasSourceVideo={options.hasSourceVideo ?? true}
+      canProcess={options.canProcess ?? true}
       errors={[]}
       warnings={[]}
       metadataWarnings={[]}
-      processorSupport={processorSupport}
+      processorSupport={resolvedProcessorSupport}
       maybeProgress={null}
       isExporting={false}
       isOutputStale={false}
