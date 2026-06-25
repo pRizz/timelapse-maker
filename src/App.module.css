@@ -2,10 +2,6 @@
   width: min(1440px, 100%);
   margin: 0 auto;
   padding: 28px;
-  background:
-    radial-gradient(circle at top left, rgb(47 142 230 / 12%), transparent 32rem),
-    radial-gradient(circle at top right, rgb(53 194 120 / 10%), transparent 30rem),
-    var(--color-page);
 }
 
 .header {
