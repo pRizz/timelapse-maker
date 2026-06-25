@@ -29,9 +29,11 @@ describe("timelapse settings", () => {
     const plan = buildSamplingPlan(baseMetadata, settings);
 
     // Assert
-    expect(plan.frameCount).toBe(288);
-    expect(plan.estimatedOutputDurationSeconds).toBe(12);
-    expect(plan.maybeEffectiveSpeed).toBe(10);
+    expect(settings.outputFps).toBe(60);
+    expect(settings.speedMultiplier).toBe(30);
+    expect(plan.frameCount).toBe(240);
+    expect(plan.estimatedOutputDurationSeconds).toBe(4);
+    expect(plan.maybeEffectiveSpeed).toBe(30);
   });
 
   it("samples interval timestamps from zero", () => {

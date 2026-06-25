@@ -31,6 +31,9 @@ export default function App() {
   const [maybeExport, setMaybeExport] = createSignal<RenderedVideo | null>(null);
   const [maybeProgress, setMaybeProgress] = createSignal<ProcessingProgress | null>(null);
   const [maybeProcessingMode, setMaybeProcessingMode] = createSignal<ProcessingMode | null>(null);
+  const [maybePendingAutoPreviewFile, setMaybePendingAutoPreviewFile] = createSignal<File | null>(
+    null,
+  );
   let maybeAbortController: AbortController | null = null;
 
   createEffect(() => {
@@ -102,6 +105,7 @@ export default function App() {
 
     clearRenderedVideos();
     setMaybeFile(file);
+    setMaybePendingAutoPreviewFile(file);
     setMaybeMetadata(null);
     setMaybeSelection(null);
     setMaybeError(null);
@@ -120,6 +124,7 @@ export default function App() {
         return;
       }
 
+      setMaybePendingAutoPreviewFile(null);
       setMaybeError(error instanceof Error ? error.message : "Could not read the selected video.");
     } finally {
       if (maybeAbortController === abortController) {
@@ -134,13 +139,13 @@ export default function App() {
     setSettings(nextSettings);
   };
 
-  const handleProcess = async (mode: ProcessingMode) => {
+  const handleProcess = async (mode: ProcessingMode, expectedFile?: File) => {
     const file = maybeFile();
     const metadata = maybeMetadata();
     const selection = maybeSelection();
     const currentSettings = settings();
 
-    if (!file || !metadata || !selection?.processor) {
+    if (!file || (expectedFile && file !== expectedFile) || !metadata || !selection?.processor) {
       return;
     }
 
@@ -201,6 +206,39 @@ export default function App() {
   const handleCancel = () => {
     maybeAbortController?.abort();
   };
+
+  createEffect(() => {
+    const pendingFile = maybePendingAutoPreviewFile();
+
+    if (!pendingFile) {
+      return;
+    }
+
+    if (maybeFile() !== pendingFile) {
+      setMaybePendingAutoPreviewFile(null);
+      return;
+    }
+
+    if (maybeError()) {
+      setMaybePendingAutoPreviewFile(null);
+      return;
+    }
+
+    const metadata = maybeMetadata();
+    const selection = maybeSelection();
+
+    if (!metadata || !selection || maybeProcessingMode() !== null) {
+      return;
+    }
+
+    if (!selection.processor || validation().errors.length > 0) {
+      setMaybePendingAutoPreviewFile(null);
+      return;
+    }
+
+    setMaybePendingAutoPreviewFile(null);
+    void handleProcess("preview", pendingFile);
+  });
 
   const clearRenderedVideos = () => {
     revokeRenderedVideo(maybePreview());

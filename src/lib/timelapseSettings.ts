@@ -69,13 +69,15 @@ export type ValidationResult = {
 };
 
 const MIN_OUTPUT_SECONDS = 0.2;
+const DEFAULT_OUTPUT_FPS: OutputFps = 60;
+const DEFAULT_SPEED_MULTIPLIER: SpeedMultiplier = 30;
 const LARGE_FILE_BYTES = 500 * 1024 * 1024;
 const LONG_VIDEO_SECONDS = 15 * 60;
 const LARGE_OUTPUT_FRAME_COUNT = 10_000;
 
 export function createDefaultSettings(maybeMetadata?: VideoMetadata | null): TimelapseSettings {
   const maybeTargetDurationSeconds = maybeMetadata
-    ? Math.max(MIN_OUTPUT_SECONDS, maybeMetadata.durationSeconds / 10)
+    ? Math.max(MIN_OUTPUT_SECONDS, maybeMetadata.durationSeconds / DEFAULT_SPEED_MULTIPLIER)
     : 6;
 
   return {
@@ -83,8 +85,8 @@ export function createDefaultSettings(maybeMetadata?: VideoMetadata | null): Tim
       mode: "target-duration",
       targetDurationSeconds: roundToTenth(maybeTargetDurationSeconds),
     },
-    outputFps: 24,
-    speedMultiplier: 10,
+    outputFps: DEFAULT_OUTPUT_FPS,
+    speedMultiplier: DEFAULT_SPEED_MULTIPLIER,
     resolution: { mode: "original" },
     muteAudio: true,
   };

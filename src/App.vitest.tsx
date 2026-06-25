@@ -1,6 +1,88 @@
-import { render } from "@solidjs/testing-library";
-import { describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, waitFor } from "@solidjs/testing-library";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
+import type { ProcessorSelection, ProcessInput } from "./lib/processors/types";
+import type { VideoMetadata } from "./lib/videoMetadata";
+
+const mocks = vi.hoisted(() => ({
+  loadVideoMetadata: vi.fn(),
+  process: vi.fn(),
+  selectProcessor: vi.fn(),
+}));
+
+vi.mock("./lib/videoMetadata", () => ({
+  loadVideoMetadata: mocks.loadVideoMetadata,
+}));
+
+vi.mock("./lib/processors/selectProcessor", () => ({
+  selectProcessor: mocks.selectProcessor,
+  toValidationCapabilities: (selection: ProcessorSelection) => ({
+    hasUsableProcessor: selection.processor !== null,
+    supportsExactFrameSampling: selection.support.supportsExactFrameSampling,
+    maybeFallbackMimeType:
+      selection.support.id === "media-recorder" ? selection.support.outputMimeType : null,
+  }),
+}));
+
+const baseMetadata: VideoMetadata = {
+  fileName: "source.mp4",
+  fileType: "video/mp4",
+  fileSizeBytes: 120_000_000,
+  durationSeconds: 120,
+  width: 1920,
+  height: 1080,
+  maybeEstimatedFps: 30,
+  canPlayNatively: true,
+  warnings: [],
+};
+
+const processorSelection: ProcessorSelection = {
+  processor: {
+    id: "webcodecs",
+    label: "WebCodecs MP4",
+    supportsExactFrameSampling: true,
+    outputMimeType: "video/mp4",
+    fileExtension: "mp4",
+    process: mocks.process,
+  },
+  support: {
+    id: "webcodecs",
+    label: "WebCodecs MP4",
+    available: true,
+    supportsExactFrameSampling: true,
+    outputMimeType: "video/mp4",
+    fileExtension: "mp4",
+    warnings: [],
+    errors: [],
+  },
+};
+
+beforeEach(() => {
+  mocks.loadVideoMetadata.mockResolvedValue(baseMetadata);
+  mocks.selectProcessor.mockResolvedValue(processorSelection);
+  mocks.process.mockImplementation(async (input: ProcessInput) => ({
+    blob: new Blob(["preview"], { type: "video/mp4" }),
+    mimeType: "video/mp4",
+    fileName: "source-preview.mp4",
+    durationSeconds: input.samplingPlan.estimatedOutputDurationSeconds,
+    frameCount: input.samplingPlan.frameCount,
+    warnings: [],
+  }));
+
+  Object.defineProperty(URL, "createObjectURL", {
+    configurable: true,
+    value: vi.fn(() => "blob:preview"),
+  });
+  Object.defineProperty(URL, "revokeObjectURL", {
+    configurable: true,
+    value: vi.fn(),
+  });
+});
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 describe("App", () => {
   it("renders the utility with disabled processing before upload", () => {
@@ -27,5 +109,34 @@ describe("App", () => {
     );
     expect(maybePreviewButton?.disabled).toBe(true);
     expect(maybeExportButton?.disabled).toBe(true);
+  });
+
+  it("automatically generates a capped preview after dropping a source video", async () => {
+    // Arrange
+    const file = new File(["video"], "source.mp4", { type: "video/mp4" });
+    const { baseElement, getByText } = render(() => <App />);
+    const dropZone = getByText("Drop an iPhone, MP4, or MOV video").closest("label");
+
+    // Act
+    fireEvent.drop(dropZone!, {
+      dataTransfer: {
+        files: {
+          item: (index: number) => (index === 0 ? file : null),
+        },
+      },
+    });
+
+    // Assert
+    await waitFor(() => expect(mocks.process).toHaveBeenCalledTimes(1));
+    const processInput = mocks.process.mock.calls[0][0] as ProcessInput;
+    expect(processInput.file).toBe(file);
+    expect(processInput.mode).toBe("preview");
+    expect(processInput.settings.speedMultiplier).toBe(30);
+    expect(processInput.settings.outputFps).toBe(60);
+    expect(processInput.samplingPlan.frameCount).toBe(240);
+    expect(processInput.samplingPlan.estimatedOutputDurationSeconds).toBe(4);
+    await waitFor(() =>
+      expect(baseElement.querySelector("video")?.getAttribute("src")).toBe("blob:preview"),
+    );
   });
 });
