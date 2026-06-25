@@ -55,6 +55,16 @@ The production bundle is static and is deployed to GitHub Pages on every push to
 `main` using GitHub Actions. The Pages build sets Vite's base path to
 `/timelapse-maker/`; local dev and preview keep the normal `/` base path.
 
+## Install / Offline
+
+The app is installable as a progressive web app in browsers that support PWA
+installation. After the first successful online load, the built app shell and
+static assets are cached so the converter can reopen offline at the same URL.
+
+Offline support does not store uploaded source videos or rendered timelapse
+outputs. Selected videos stay in the active browser session, and exported files
+are still downloaded through the browser.
+
 ## Privacy
 
 Your video stays on your device. The app uses browser `File`, object URL,
@@ -96,4 +106,3 @@ or settings may not work in the current browser.
 - Resumable or chunked processing for very large videos.
 - Browser-matrix smoke tests with representative MP4, MOV, H.264, and HEVC
   samples.
-- PWA install and offline caching.

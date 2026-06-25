@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://prizz.github.io/timelapse-maker/sitemap.xml

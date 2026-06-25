@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Timelapse Maker</title>
+  <defs>
+    <linearGradient id="background" x1="80" y1="48" x2="432" y2="464" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0b0f14" />
+      <stop offset="1" stop-color="#17212c" />
+    </linearGradient>
+    <linearGradient id="frame" x1="148" y1="152" x2="364" y2="360" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#59d3ff" />
+      <stop offset="0.55" stop-color="#72f5a0" />
+      <stop offset="1" stop-color="#ffd166" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#background)" />
+  <path
+    d="M128 162c0-24.3 19.7-44 44-44h168c24.3 0 44 19.7 44 44v188c0 24.3-19.7 44-44 44H172c-24.3 0-44-19.7-44-44V162Z"
+    fill="#101821"
+    stroke="#2c4050"
+    stroke-width="18"
+  />
+  <path d="M198 176h50v50h-50v-50Zm68 0h50v50h-50v-50Zm-68 110h50v50h-50v-50Zm68 0h50v50h-50v-50Z" fill="#263746" />
+  <path d="M338 256 210 184v144l128-72Z" fill="url(#frame)" />
+  <path d="M154 118h204" stroke="#59d3ff" stroke-width="18" stroke-linecap="round" opacity="0.7" />
+  <path d="M154 394h204" stroke="#72f5a0" stroke-width="18" stroke-linecap="round" opacity="0.7" />
+</svg>
