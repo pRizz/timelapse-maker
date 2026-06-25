@@ -1,41 +1,97 @@
 import { For, Show } from "solid-js";
 import type { RenderedVideo } from "../lib/renderedVideo";
-import type { ProcessingProgress } from "../lib/processors/types";
+import type { ProcessingProgress, ProcessorSupport } from "../lib/processors/types";
 import { formatDuration } from "../lib/formatters";
 import styles from "./OutputPane.module.css";
 
 type OutputPaneProps = {
   maybeOutput: RenderedVideo | null;
+  canProcess: boolean;
+  errors: string[];
+  warnings: string[];
+  metadataWarnings: string[];
+  processorSupport: ProcessorSupport | null;
+  maybeProgress: ProcessingProgress | null;
   isExporting: boolean;
   isOutputStale: boolean;
-  maybeProgress: ProcessingProgress | null;
+  hasExportAttempted: boolean;
+  onExport: () => void;
+  onCancel: () => void;
 };
 
 export function OutputPane(props: OutputPaneProps) {
+  const shouldShowExportAction = () =>
+    props.canProcess && !props.isExporting && (!props.maybeOutput || props.isOutputStale);
+  const exportActionLabel = () => {
+    if (props.isOutputStale) {
+      return "Re-export";
+    }
+
+    if (props.hasExportAttempted) {
+      return "Retry export";
+    }
+
+    return "Export video";
+  };
+  const progressPercent = () =>
+    props.maybeProgress && props.maybeProgress.totalFrames > 0
+      ? Math.round((props.maybeProgress.completedFrames / props.maybeProgress.totalFrames) * 100)
+      : 0;
+
   return (
     <section class={styles.panel} aria-labelledby="output-title">
       <div class={styles.heading}>
         <h2 id="output-title">Output</h2>
-        <p>Final exported timelapse.</p>
+        <p>
+          Processor:{" "}
+          <strong>{props.processorSupport?.available ? props.processorSupport.label : "Unavailable"}</strong>
+        </p>
       </div>
 
-      <Show
-        when={props.isExporting && !props.maybeOutput}
-        fallback={
-          <OutputContent
-            maybeOutput={props.maybeOutput}
-            isExporting={props.isExporting}
-            isOutputStale={props.isOutputStale}
-            maybeProgress={props.maybeProgress}
-          />
-        }
-      >
-        <div class={styles.generatingState} role="status" aria-live="polite">
-          <span class={styles.spinner} aria-hidden="true" />
-          <strong>Export in progress</strong>
-          <p>{props.maybeProgress?.message ?? "Preparing render"}</p>
+      <div class={styles.actions}>
+        <Show when={shouldShowExportAction()}>
+          <button class={styles.primaryButton} type="button" onClick={props.onExport}>
+            {exportActionLabel()}
+          </button>
+        </Show>
+        <Show when={props.isExporting}>
+          <button type="button" onClick={props.onCancel}>
+            Cancel
+          </button>
+        </Show>
+      </div>
+
+      <Show when={props.maybeProgress}>
+        <div class={styles.progressBlock} role="status" aria-live="polite">
+          <div class={styles.progressHeader}>
+            <span>Export in progress</span>
+            <span>{progressPercent()}%</span>
+          </div>
+          <progress value={progressPercent()} max={100} />
+          <p>{props.maybeProgress?.message}</p>
         </div>
       </Show>
+
+      <OutputContent
+        maybeOutput={props.maybeOutput}
+        isExporting={props.isExporting}
+        isOutputStale={props.isOutputStale}
+      />
+
+      <MessageList
+        title="Errors"
+        messages={[...(props.processorSupport?.errors ?? []), ...props.errors]}
+        tone="error"
+      />
+      <MessageList
+        title="Warnings"
+        messages={[
+          ...props.metadataWarnings,
+          ...(props.processorSupport?.warnings ?? []),
+          ...props.warnings,
+        ]}
+        tone="warning"
+      />
     </section>
   );
 }
@@ -44,12 +100,17 @@ function OutputContent(props: {
   maybeOutput: RenderedVideo | null;
   isExporting: boolean;
   isOutputStale: boolean;
-  maybeProgress: ProcessingProgress | null;
 }) {
   return (
     <Show
       when={props.maybeOutput}
-      fallback={<div class={styles.emptyState}>Drop a video to start the full export.</div>}
+      fallback={
+        <div class={styles.emptyState}>
+          {props.isExporting
+            ? "Output will appear here when export finishes."
+            : "Drop a video to start the full export."}
+        </div>
+      }
     >
       {(output) => (
         <div class={styles.playerWrap}>
@@ -60,7 +121,7 @@ function OutputContent(props: {
           </Show>
           <Show when={props.isExporting}>
             <div class={styles.updateNotice} role="status" aria-live="polite">
-              Updating output: {props.maybeProgress?.message ?? "Preparing render"}
+              Updating output.
             </div>
           </Show>
           <video class={styles.video} src={output().url} controls playsinline />
@@ -85,16 +146,27 @@ function OutputContent(props: {
           <a class={styles.downloadLink} href={output().url} download={output().fileName}>
             Download
           </a>
-          <Show when={output().warnings.length > 0}>
-            <div class={styles.warningList}>
-              <strong>Warnings</strong>
-              <ul>
-                <For each={Array.from(new Set(output().warnings))}>{(warning) => <li>{warning}</li>}</For>
-              </ul>
-            </div>
-          </Show>
         </div>
       )}
     </Show>
+  );
+}
+
+function MessageList(props: {
+  title: string;
+  messages: string[];
+  tone: "error" | "warning";
+}) {
+  if (props.messages.length === 0) {
+    return null;
+  }
+
+  return (
+    <div class={props.tone === "error" ? styles.errorList : styles.warningList}>
+      <strong>{props.title}</strong>
+      <ul>
+        <For each={Array.from(new Set(props.messages))}>{(message) => <li>{message}</li>}</For>
+      </ul>
+    </div>
   );
 }

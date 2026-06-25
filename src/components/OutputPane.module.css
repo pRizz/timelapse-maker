@@ -17,6 +17,49 @@
   color: var(--color-muted);
 }
 
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.actions:not(:empty) {
+  margin-bottom: 16px;
+}
+
+.primaryButton {
+  border-color: var(--color-primary-strong);
+  background: var(--color-primary-strong);
+  color: var(--color-text-strong);
+  font-weight: 760;
+}
+
+.progressBlock {
+  margin-bottom: 16px;
+}
+
+.progressHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--color-muted-strong);
+  font-weight: 760;
+}
+
+.progressBlock progress {
+  width: 100%;
+  height: 12px;
+  margin-top: 8px;
+  accent-color: var(--color-primary);
+}
+
+.progressBlock p {
+  margin: 8px 0 0;
+  color: var(--color-muted);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
 .playerWrap {
   display: grid;
   gap: 12px;
@@ -69,40 +112,9 @@
   padding: 24px;
 }
 
-.generatingState {
-  display: grid;
-  place-items: center;
-  gap: 10px;
-  min-height: 220px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-page-soft);
-  color: var(--color-muted);
-  text-align: center;
-  padding: 24px;
-}
-
-.generatingState strong {
-  color: var(--color-text-strong);
-}
-
-.generatingState p {
-  margin: 0;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  font-variant-numeric: tabular-nums;
-}
-
-.spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid var(--color-border);
-  border-top-color: var(--color-primary);
-  border-radius: 999px;
-  animation: spin 0.8s linear infinite;
-}
-
 .staleNotice,
 .updateNotice,
+.errorList,
 .warningList {
   border-radius: 8px;
   padding: 12px 14px;
@@ -135,17 +147,30 @@
   text-decoration: none;
 }
 
+.errorList,
+.warningList {
+  margin-top: 16px;
+}
+
+.errorList {
+  border: 1px solid var(--color-error-border);
+  background: var(--color-error-soft);
+  color: var(--color-error);
+}
+
 .warningList {
   border: 1px solid var(--color-warning-border);
   background: var(--color-warning-soft);
   color: var(--color-warning);
 }
 
+.errorList ul,
 .warningList ul {
   margin: 8px 0 0;
   padding-left: 20px;
 }
 
+.errorList li,
 .warningList li {
   margin: 4px 0;
 }
@@ -158,10 +183,8 @@
   .downloadLink {
     width: 100%;
   }
-}
 
-@keyframes spin {
-  to {
-    transform: rotate(1turn);
+  .actions {
+    display: grid;
   }
 }

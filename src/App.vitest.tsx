@@ -82,7 +82,7 @@ afterEach(() => {
 describe("App", () => {
   it("renders the utility with an output pane before upload", () => {
     // Arrange
-    const { baseElement, getByRole } = render(() => <App />);
+    const { baseElement, getByRole, queryByRole } = render(() => <App />);
 
     // Act
     const text = baseElement.textContent ?? "";
@@ -103,6 +103,7 @@ describe("App", () => {
     expect(text).not.toContain("Client-side video utility");
     expect(text).not.toContain("Copy build info");
     expect(getByRole("heading", { name: "Output" })).toBeInTheDocument();
+    expect(queryByRole("heading", { name: "Export" })).not.toBeInTheDocument();
     expect(maybeCommitLink?.textContent).toMatch(/^[0-9a-f]{7}$/i);
     expect(maybeCommitLink?.getAttribute("href")).toMatch(
       /^https:\/\/github\.com\/pRizz\/timelapse-maker\/commit\/[0-9a-f]{40}$/i,
@@ -166,7 +167,7 @@ describe("App", () => {
 
       return deferred.promise.then(() => buildProcessResult(input));
     });
-    const { baseElement, getAllByText, getByText } = render(() => <App />);
+    const { baseElement, getByText } = render(() => <App />);
     const dropZone = getByText("Drop an iPhone, MP4, or MOV video").closest("label");
 
     // Act
@@ -180,8 +181,8 @@ describe("App", () => {
 
     // Assert
     await waitFor(() => expect(mocks.process).toHaveBeenCalledTimes(1));
-    expect(getAllByText("Export in progress").length).toBeGreaterThanOrEqual(1);
-    expect(getAllByText("Processing frame 12 / 240")).toHaveLength(2);
+    expect(getByText("Export in progress")).toBeInTheDocument();
+    expect(getByText("Processing frame 12 / 240")).toBeInTheDocument();
     deferred.resolve();
     await waitFor(() =>
       expect(baseElement.querySelector("video")?.getAttribute("src")).toBe("blob:output"),

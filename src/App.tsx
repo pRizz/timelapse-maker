@@ -1,6 +1,5 @@
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { BuildInfo } from "./components/BuildInfo";
-import { ExportPanel } from "./components/ExportPanel";
 import { OutputPane } from "./components/OutputPane";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { VideoUploader } from "./components/VideoUploader";
@@ -287,9 +286,17 @@ export default function App() {
           />
           <OutputPane
             maybeOutput={maybeOutput()}
+            canProcess={canProcess()}
+            errors={exportErrors()}
+            warnings={[...validation().warnings, ...(maybeOutput()?.warnings ?? [])]}
+            metadataWarnings={maybeMetadata()?.warnings ?? []}
+            processorSupport={maybeSelection()?.support ?? null}
+            maybeProgress={maybeProgress()}
             isExporting={isExporting()}
             isOutputStale={isOutputStale()}
-            maybeProgress={maybeProgress()}
+            hasExportAttempted={hasExportAttempted()}
+            onExport={() => void handleExport()}
+            onCancel={handleCancel}
           />
         </div>
 
@@ -300,20 +307,6 @@ export default function App() {
             isDisabled={isExportWorkflowBusy()}
             supportsExactFrameSampling={maybeSelection()?.support.supportsExactFrameSampling ?? false}
             onSettingsChange={handleSettingsChange}
-          />
-          <ExportPanel
-            canProcess={canProcess()}
-            errors={exportErrors()}
-            warnings={[...validation().warnings, ...(maybeOutput()?.warnings ?? [])]}
-            metadataWarnings={maybeMetadata()?.warnings ?? []}
-            processorSupport={maybeSelection()?.support ?? null}
-            maybeProgress={maybeProgress()}
-            isExporting={isExporting()}
-            hasOutput={maybeOutput() !== null}
-            isOutputStale={isOutputStale()}
-            hasExportAttempted={hasExportAttempted()}
-            onExport={() => void handleExport()}
-            onCancel={handleCancel}
           />
         </div>
       </main>
