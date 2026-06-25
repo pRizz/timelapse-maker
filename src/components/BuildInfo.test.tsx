@@ -12,16 +12,23 @@ const linkedBuildInfo: BuildInfoDetails = {
 };
 
 describe("BuildInfo", () => {
-  it("opens linked build provenance in new tabs", () => {
+  it("opens linked build provenance and footer attribution in new tabs", () => {
     // Arrange
     const { baseElement } = render(() => <BuildInfoView buildInfo={linkedBuildInfo} />);
 
     // Act
+    const text = baseElement.textContent ?? "";
     const maybeCommitLink = Array.from(baseElement.querySelectorAll("a")).find((link) =>
       link.getAttribute("href")?.includes("/commit/"),
     );
     const maybeBuildLink = Array.from(baseElement.querySelectorAll("a")).find((link) =>
       link.getAttribute("href")?.includes("/actions/runs/"),
+    );
+    const maybeGitHubLink = Array.from(baseElement.querySelectorAll("a")).find(
+      (link) => link.getAttribute("href") === "https://github.com/pRizz/timelapse-maker",
+    );
+    const maybeOpenLinksLink = Array.from(baseElement.querySelectorAll("a")).find(
+      (link) => link.getAttribute("href") === "https://openlinks.us/",
     );
 
     // Assert
@@ -31,5 +38,14 @@ describe("BuildInfo", () => {
     expect(maybeBuildLink?.textContent).toBe(linkedBuildInfo.buildTime);
     expect(maybeBuildLink).toHaveAttribute("target", "_blank");
     expect(maybeBuildLink).toHaveAttribute("rel", "noopener noreferrer");
+    expect(text).toContain("Free and open source");
+    expect(maybeGitHubLink?.textContent).toBe("GitHub");
+    expect(maybeGitHubLink).toHaveAttribute("target", "_blank");
+    expect(maybeGitHubLink).toHaveAttribute("rel", "noopener noreferrer");
+    expect(maybeGitHubLink?.querySelector('[data-logo="github"]')).toBeInTheDocument();
+    expect(maybeOpenLinksLink?.textContent).toBe("By Peter Ryszkiewicz");
+    expect(maybeOpenLinksLink).toHaveAttribute("target", "_blank");
+    expect(maybeOpenLinksLink).toHaveAttribute("rel", "me noopener noreferrer");
+    expect(maybeOpenLinksLink?.querySelector('[data-logo="openlinks"]')).toBeInTheDocument();
   });
 });
