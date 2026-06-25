@@ -6,6 +6,7 @@ import {
   validateSettings,
   type TimelapseSettings,
 } from "./timelapseSettings";
+import { buildPreviewSamplingOptions } from "./previewSampling";
 import type { VideoMetadata } from "./videoMetadata";
 
 const baseMetadata: VideoMetadata = {
@@ -48,7 +49,7 @@ describe("timelapse settings", () => {
     const settings = createDefaultSettings(metadata);
 
     // Act
-    const plan = buildSamplingPlan(metadata, settings, { maxFrameCount: 240 });
+    const plan = buildSamplingPlan(metadata, settings, buildPreviewSamplingOptions(settings));
 
     // Assert
     expect(plan.frameCount).toBe(240);

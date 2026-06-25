@@ -16,12 +16,13 @@ import styles from "./SettingsPanel.module.css";
 type SettingsPanelProps = {
   maybeMetadata: VideoMetadata | null;
   settings: TimelapseSettings;
+  isDisabled: boolean;
   supportsExactFrameSampling: boolean;
   onSettingsChange: (settings: TimelapseSettings) => void;
 };
 
 export function SettingsPanel(props: SettingsPanelProps) {
-  const disabled = () => !props.maybeMetadata;
+  const disabled = () => !props.maybeMetadata || props.isDisabled;
   const maybePlan = createMemo(() =>
     props.maybeMetadata ? buildSamplingPlan(props.maybeMetadata, props.settings) : null,
   );
@@ -162,8 +163,8 @@ export function SettingsPanel(props: SettingsPanelProps) {
           </label>
         ) : null}
 
-        <div class={styles.speedGroup} aria-label="Speed multiplier preview">
-          <span>Speed preview</span>
+        <div class={styles.speedGroup} aria-label="Speed multiplier">
+          <span>Speed</span>
           <div class={styles.segmented}>
             <For each={SPEED_MULTIPLIERS}>
               {(speedMultiplier) => (

@@ -1,7 +1,5 @@
 import { For, Show } from "solid-js";
-import type { RenderedVideo } from "../lib/renderedVideo";
-import type { ProcessingMode, ProcessingProgress, ProcessorSupport } from "../lib/processors/types";
-import { formatDuration } from "../lib/formatters";
+import type { ProcessingProgress, ProcessorSupport } from "../lib/processors/types";
 import styles from "./ExportPanel.module.css";
 
 type ExportPanelProps = {
@@ -11,15 +9,28 @@ type ExportPanelProps = {
   metadataWarnings: string[];
   processorSupport: ProcessorSupport | null;
   maybeProgress: ProcessingProgress | null;
-  maybeProcessingMode: ProcessingMode | null;
-  maybeExport: RenderedVideo | null;
-  onPreview: () => void;
+  isExporting: boolean;
+  hasOutput: boolean;
+  isOutputStale: boolean;
+  hasExportAttempted: boolean;
   onExport: () => void;
   onCancel: () => void;
 };
 
 export function ExportPanel(props: ExportPanelProps) {
-  const isProcessing = () => props.maybeProcessingMode !== null;
+  const shouldShowExportAction = () =>
+    props.canProcess && !props.isExporting && (!props.hasOutput || props.isOutputStale);
+  const exportActionLabel = () => {
+    if (props.isOutputStale) {
+      return "Re-export";
+    }
+
+    if (props.hasExportAttempted) {
+      return "Retry export";
+    }
+
+    return "Export video";
+  };
   const progressPercent = () =>
     props.maybeProgress && props.maybeProgress.totalFrames > 0
       ? Math.round((props.maybeProgress.completedFrames / props.maybeProgress.totalFrames) * 100)
@@ -36,18 +47,12 @@ export function ExportPanel(props: ExportPanelProps) {
       </div>
 
       <div class={styles.actions}>
-        <button type="button" onClick={props.onPreview} disabled={!props.canProcess || isProcessing()}>
-          Generate preview
-        </button>
-        <button
-          class={styles.primaryButton}
-          type="button"
-          onClick={props.onExport}
-          disabled={!props.canProcess || isProcessing()}
-        >
-          Export video
-        </button>
-        <Show when={isProcessing()}>
+        <Show when={shouldShowExportAction()}>
+          <button class={styles.primaryButton} type="button" onClick={props.onExport}>
+            {exportActionLabel()}
+          </button>
+        </Show>
+        <Show when={props.isExporting}>
           <button type="button" onClick={props.onCancel}>
             Cancel
           </button>
@@ -57,7 +62,7 @@ export function ExportPanel(props: ExportPanelProps) {
       <Show when={props.maybeProgress}>
         <div class={styles.progressBlock} role="status" aria-live="polite">
           <div class={styles.progressHeader}>
-            <span>{props.maybeProcessingMode === "preview" ? "Preview" : "Export"} in progress</span>
+            <span>Export in progress</span>
             <span>{progressPercent()}%</span>
           </div>
           <progress value={progressPercent()} max={100} />
@@ -65,24 +70,11 @@ export function ExportPanel(props: ExportPanelProps) {
         </div>
       </Show>
 
-      <Show when={props.maybeExport}>
-        {(exportedVideo) => (
-        <div class={styles.downloadPanel}>
-          <div>
-            <strong>{exportedVideo().fileName}</strong>
-            <p>
-              {exportedVideo().mimeType} - {formatDuration(exportedVideo().durationSeconds)} -{" "}
-              {exportedVideo().frameCount.toLocaleString()} frames
-            </p>
-          </div>
-          <a href={exportedVideo().url} download={exportedVideo().fileName}>
-            Download
-          </a>
-        </div>
-        )}
-      </Show>
-
-      <MessageList title="Errors" messages={props.errors} tone="error" />
+      <MessageList
+        title="Errors"
+        messages={[...(props.processorSupport?.errors ?? []), ...props.errors]}
+        tone="error"
+      />
       <MessageList
         title="Warnings"
         messages={[

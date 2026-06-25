@@ -1,11 +1,11 @@
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { BuildInfo } from "./components/BuildInfo";
 import { ExportPanel } from "./components/ExportPanel";
-import { PreviewPlayer } from "./components/PreviewPlayer";
+import { OutputPane } from "./components/OutputPane";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { VideoUploader } from "./components/VideoUploader";
 import type { RenderedVideo } from "./lib/renderedVideo";
-import type { ProcessingMode, ProcessingProgress, ProcessResult } from "./lib/processors/types";
+import type { ProcessingProgress, ProcessResult } from "./lib/processors/types";
 import { selectProcessor, toValidationCapabilities } from "./lib/processors/selectProcessor";
 import type { ProcessorSelection } from "./lib/processors/types";
 import {
@@ -17,21 +17,20 @@ import {
 import { loadVideoMetadata, type VideoMetadata } from "./lib/videoMetadata";
 import styles from "./App.module.css";
 
-const PREVIEW_MAX_FRAMES = 240;
-const PREVIEW_FRAME_BUDGET_SECONDS = 8;
-
 export default function App() {
   const [maybeFile, setMaybeFile] = createSignal<File | null>(null);
   const [maybeMetadata, setMaybeMetadata] = createSignal<VideoMetadata | null>(null);
   const [settings, setSettings] = createSignal<TimelapseSettings>(createDefaultSettings());
   const [maybeSelection, setMaybeSelection] = createSignal<ProcessorSelection | null>(null);
   const [isLoadingMetadata, setIsLoadingMetadata] = createSignal(false);
-  const [maybeError, setMaybeError] = createSignal<string | null>(null);
-  const [maybePreview, setMaybePreview] = createSignal<RenderedVideo | null>(null);
-  const [maybeExport, setMaybeExport] = createSignal<RenderedVideo | null>(null);
+  const [maybeSourceError, setMaybeSourceError] = createSignal<string | null>(null);
+  const [maybeExportError, setMaybeExportError] = createSignal<string | null>(null);
+  const [maybeOutput, setMaybeOutput] = createSignal<RenderedVideo | null>(null);
   const [maybeProgress, setMaybeProgress] = createSignal<ProcessingProgress | null>(null);
-  const [maybeProcessingMode, setMaybeProcessingMode] = createSignal<ProcessingMode | null>(null);
-  const [maybePendingAutoPreviewFile, setMaybePendingAutoPreviewFile] = createSignal<File | null>(
+  const [isExporting, setIsExporting] = createSignal(false);
+  const [hasExportAttempted, setHasExportAttempted] = createSignal(false);
+  const [isOutputStale, setIsOutputStale] = createSignal(false);
+  const [maybePendingAutoExportFile, setMaybePendingAutoExportFile] = createSignal<File | null>(
     null,
   );
   let maybeAbortController: AbortController | null = null;
@@ -51,12 +50,15 @@ export default function App() {
       .then((selection) => {
         if (isCurrent) {
           setMaybeSelection(selection);
+          setMaybeExportError(null);
         }
       })
       .catch((error: unknown) => {
         if (isCurrent) {
           setMaybeSelection(null);
-          setMaybeError(error instanceof Error ? error.message : "Browser support detection failed.");
+          setMaybeExportError(
+            error instanceof Error ? error.message : "Browser support detection failed.",
+          );
         }
       });
 
@@ -67,8 +69,7 @@ export default function App() {
 
   onCleanup(() => {
     maybeAbortController?.abort();
-    revokeRenderedVideo(maybePreview());
-    revokeRenderedVideo(maybeExport());
+    revokeRenderedVideo(maybeOutput());
   });
 
   const validation = createMemo(() => {
@@ -86,6 +87,12 @@ export default function App() {
     );
   });
 
+  const exportErrors = createMemo(() => {
+    const maybeError = maybeExportError();
+
+    return maybeError ? [maybeError, ...validation().errors] : validation().errors;
+  });
+
   const canProcess = createMemo(() => {
     const selection = maybeSelection();
 
@@ -94,9 +101,13 @@ export default function App() {
       Boolean(maybeMetadata()) &&
       Boolean(selection?.processor) &&
       validation().errors.length === 0 &&
-      maybeProcessingMode() === null
+      !isExporting()
     );
   });
+
+  const isExportWorkflowBusy = createMemo(
+    () => isLoadingMetadata() || isExporting() || maybePendingAutoExportFile() !== null,
+  );
 
   const handleFileSelected = async (file: File) => {
     maybeAbortController?.abort();
@@ -105,10 +116,15 @@ export default function App() {
 
     clearRenderedVideos();
     setMaybeFile(file);
-    setMaybePendingAutoPreviewFile(file);
+    setMaybePendingAutoExportFile(file);
     setMaybeMetadata(null);
     setMaybeSelection(null);
-    setMaybeError(null);
+    setMaybeSourceError(null);
+    setMaybeExportError(null);
+    setMaybeProgress(null);
+    setIsExporting(false);
+    setHasExportAttempted(false);
+    setIsOutputStale(false);
     setIsLoadingMetadata(true);
 
     try {
@@ -124,8 +140,10 @@ export default function App() {
         return;
       }
 
-      setMaybePendingAutoPreviewFile(null);
-      setMaybeError(error instanceof Error ? error.message : "Could not read the selected video.");
+      setMaybePendingAutoExportFile(null);
+      setMaybeSourceError(
+        error instanceof Error ? error.message : "Could not read the selected video.",
+      );
     } finally {
       if (maybeAbortController === abortController) {
         maybeAbortController = null;
@@ -135,36 +153,44 @@ export default function App() {
   };
 
   const handleSettingsChange = (nextSettings: TimelapseSettings) => {
-    clearRenderedVideos();
     setSettings(nextSettings);
+    setMaybeExportError(null);
+
+    if (maybeOutput()) {
+      setIsOutputStale(true);
+    }
   };
 
-  const handleProcess = async (mode: ProcessingMode, expectedFile?: File) => {
+  const handleExport = async (expectedFile?: File) => {
     const file = maybeFile();
     const metadata = maybeMetadata();
     const selection = maybeSelection();
     const currentSettings = settings();
 
-    if (!file || (expectedFile && file !== expectedFile) || !metadata || !selection?.processor) {
+    if (
+      isExporting() ||
+      !file ||
+      (expectedFile && file !== expectedFile) ||
+      !metadata ||
+      !selection?.processor ||
+      validation().errors.length > 0
+    ) {
       return;
     }
 
     const abortController = new AbortController();
     maybeAbortController = abortController;
-    setMaybeProcessingMode(mode);
+    setIsExporting(true);
+    setHasExportAttempted(true);
     setMaybeProgress({
       stage: "preparing",
       completedFrames: 0,
       totalFrames: 0,
       message: "Preparing render",
     });
-    setMaybeError(null);
+    setMaybeExportError(null);
 
-    const samplingPlan = buildSamplingPlan(
-      metadata,
-      currentSettings,
-      mode === "preview" ? buildPreviewSamplingOptions(currentSettings) : {},
-    );
+    const samplingPlan = buildSamplingPlan(metadata, currentSettings);
 
     try {
       const result = await selection.processor.process({
@@ -172,30 +198,26 @@ export default function App() {
         metadata,
         settings: currentSettings,
         samplingPlan,
-        mode,
+        mode: "export",
         signal: abortController.signal,
         onProgress: setMaybeProgress,
       });
       const renderedVideo = toRenderedVideo(result);
 
-      if (mode === "preview") {
-        revokeRenderedVideo(maybePreview());
-        setMaybePreview(renderedVideo);
-      } else {
-        revokeRenderedVideo(maybeExport());
-        setMaybeExport(renderedVideo);
-        downloadRenderedVideo(renderedVideo);
-      }
+      revokeRenderedVideo(maybeOutput());
+      setMaybeOutput(renderedVideo);
+      setIsOutputStale(false);
+      downloadRenderedVideo(renderedVideo);
     } catch (error) {
       if (!isAbortError(error)) {
-        setMaybeError(error instanceof Error ? error.message : "Processing failed.");
+        setMaybeExportError(error instanceof Error ? error.message : "Processing failed.");
       }
     } finally {
       if (maybeAbortController === abortController) {
         maybeAbortController = null;
+        setMaybeProgress(null);
+        setIsExporting(false);
       }
-      setMaybeProgress(null);
-      setMaybeProcessingMode(null);
     }
   };
 
@@ -204,43 +226,42 @@ export default function App() {
   };
 
   createEffect(() => {
-    const pendingFile = maybePendingAutoPreviewFile();
+    const pendingFile = maybePendingAutoExportFile();
 
     if (!pendingFile) {
       return;
     }
 
     if (maybeFile() !== pendingFile) {
-      setMaybePendingAutoPreviewFile(null);
+      setMaybePendingAutoExportFile(null);
       return;
     }
 
-    if (maybeError()) {
-      setMaybePendingAutoPreviewFile(null);
+    if (maybeSourceError() || maybeExportError()) {
+      setMaybePendingAutoExportFile(null);
       return;
     }
 
     const metadata = maybeMetadata();
     const selection = maybeSelection();
 
-    if (!metadata || !selection || maybeProcessingMode() !== null) {
+    if (!metadata || !selection || isExporting()) {
       return;
     }
 
     if (!selection.processor || validation().errors.length > 0) {
-      setMaybePendingAutoPreviewFile(null);
+      setMaybePendingAutoExportFile(null);
       return;
     }
 
-    setMaybePendingAutoPreviewFile(null);
-    void handleProcess("preview", pendingFile);
+    setMaybePendingAutoExportFile(null);
+    void handleExport(pendingFile);
   });
 
   const clearRenderedVideos = () => {
-    revokeRenderedVideo(maybePreview());
-    revokeRenderedVideo(maybeExport());
-    setMaybePreview(null);
-    setMaybeExport(null);
+    revokeRenderedVideo(maybeOutput());
+    setMaybeOutput(null);
+    setIsOutputStale(false);
   };
 
   return (
@@ -261,13 +282,14 @@ export default function App() {
           <VideoUploader
             maybeMetadata={maybeMetadata()}
             isLoading={isLoadingMetadata()}
-            maybeError={maybeError()}
+            maybeError={maybeSourceError()}
             onFileSelected={handleFileSelected}
           />
-          <PreviewPlayer
-            maybePreview={maybePreview()}
-            isGeneratingPreview={maybeProcessingMode() === "preview"}
-            maybeProgress={maybeProcessingMode() === "preview" ? maybeProgress() : null}
+          <OutputPane
+            maybeOutput={maybeOutput()}
+            isExporting={isExporting()}
+            isOutputStale={isOutputStale()}
+            maybeProgress={maybeProgress()}
           />
         </div>
 
@@ -275,20 +297,22 @@ export default function App() {
           <SettingsPanel
             maybeMetadata={maybeMetadata()}
             settings={settings()}
+            isDisabled={isExportWorkflowBusy()}
             supportsExactFrameSampling={maybeSelection()?.support.supportsExactFrameSampling ?? false}
             onSettingsChange={handleSettingsChange}
           />
           <ExportPanel
             canProcess={canProcess()}
-            errors={validation().errors}
-            warnings={validation().warnings}
+            errors={exportErrors()}
+            warnings={[...validation().warnings, ...(maybeOutput()?.warnings ?? [])]}
             metadataWarnings={maybeMetadata()?.warnings ?? []}
             processorSupport={maybeSelection()?.support ?? null}
             maybeProgress={maybeProgress()}
-            maybeProcessingMode={maybeProcessingMode()}
-            maybeExport={maybeExport()}
-            onPreview={() => void handleProcess("preview")}
-            onExport={() => void handleProcess("export")}
+            isExporting={isExporting()}
+            hasOutput={maybeOutput() !== null}
+            isOutputStale={isOutputStale()}
+            hasExportAttempted={hasExportAttempted()}
+            onExport={() => void handleExport()}
             onCancel={handleCancel}
           />
         </div>
@@ -314,15 +338,6 @@ function revokeRenderedVideo(maybeRenderedVideo: RenderedVideo | null): void {
   if (maybeRenderedVideo) {
     URL.revokeObjectURL(maybeRenderedVideo.url);
   }
-}
-
-function buildPreviewSamplingOptions(settings: TimelapseSettings): { maxFrameCount: number } {
-  return {
-    maxFrameCount: Math.min(
-      PREVIEW_MAX_FRAMES,
-      Math.floor(PREVIEW_FRAME_BUDGET_SECONDS * settings.outputFps),
-    ),
-  };
 }
 
 function downloadRenderedVideo(renderedVideo: RenderedVideo): void {

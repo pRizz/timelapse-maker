@@ -56,33 +56,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.downloadPanel {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 16px;
-  border: 1px solid var(--color-success-border);
-  border-radius: 8px;
-  background: var(--color-success-soft);
-  padding: 14px;
-}
-
-.downloadPanel p {
-  margin: 4px 0 0;
-  color: var(--color-muted-strong);
-}
-
-.downloadPanel a {
-  border-radius: 8px;
-  background: var(--color-success);
-  color: #06100b;
-  font-weight: 760;
-  padding: 10px 14px;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
 .errorList,
 .warningList {
   margin-top: 16px;
@@ -114,8 +87,7 @@
 }
 
 @media (max-width: 520px) {
-  .actions,
-  .downloadPanel {
+  .actions {
     display: grid;
   }
 }
