@@ -10,3 +10,90 @@
 [![OpenLinks profile](https://img.shields.io/badge/OpenLinks-profile-0F172A)](https://openlinks.us/)
 
 <!-- bright-builds-rules-readme-badges:end -->
+
+Timelapse Maker is a front-end-only browser app that converts local iPhone, MP4,
+and MOV videos into downloadable timelapse videos. It samples source frames,
+re-encodes the selected frames in the browser, and never uploads the video file.
+
+Live site: <https://prizz.github.io/timelapse-maker/>
+
+## Run Locally
+
+Install dependencies:
+
+```bash
+bun install
+```
+
+Start the dev server:
+
+```bash
+bun run dev
+```
+
+Build the production bundle:
+
+```bash
+bun run build
+```
+
+Preview the production bundle:
+
+```bash
+bun run preview
+```
+
+Run tests:
+
+```bash
+bun test
+```
+
+## Deployment
+
+The production bundle is static and is deployed to GitHub Pages on every push to
+`main` using GitHub Actions. The Pages build sets Vite's base path to
+`/timelapse-maker/`; local dev and preview keep the normal `/` base path.
+
+## Privacy
+
+Your video stays on your device. The app uses browser `File`, object URL,
+canvas, WebCodecs, MediaRecorder, and WebAssembly-free JavaScript APIs. There is
+no backend, no upload step, and no telemetry.
+
+## Browser Compatibility
+
+The app prefers a WebCodecs + Mediabunny processing path for MP4 output. When
+that is unavailable, it falls back to drawing frames through canvas and encoding
+with MediaRecorder. Browser support differs:
+
+- Chrome and Chromium-based browsers generally provide the broadest WebCodecs
+  and MediaRecorder support.
+- Safari support depends on macOS/iOS codec capabilities, especially for iPhone
+  HEVC/H.265 and MOV files.
+- Firefox may use the MediaRecorder fallback and may export WebM instead of MP4.
+
+The UI detects available processors and shows warnings when the selected video
+or settings may not work in the current browser.
+
+## Known Limitations
+
+- HEVC/H.265 and MOV decoding depends on the browser, operating system, and
+  installed codecs.
+- Frame-accurate "keep every Nth frame" is best in the WebCodecs path. The
+  MediaRecorder fallback needs an FPS estimate and may be approximate.
+- Fallback export can run close to real time because MediaRecorder timestamps
+  frames from wall-clock time.
+- Unmuted timelapse audio is not supported in v1. Exports are silent by default.
+- Very large or long videos can hit browser memory, decoding, or encoder limits.
+
+## Future Improvements
+
+- Optional isolated `ffmpeg.wasm` adapter for browsers that cannot decode or
+  encode a needed format natively.
+- Audio speed-up and muxing pipeline.
+- Batch conversion.
+- Resumable or chunked processing for very large videos.
+- Browser-matrix smoke tests with representative MP4, MOV, H.264, and HEVC
+  samples.
+- PWA install and offline caching.

@@ -1,0 +1,127 @@
+.panel {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-panel);
+  box-shadow: var(--shadow-panel);
+  padding: 20px;
+}
+
+.headingRow {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.headingRow h2 {
+  margin: 0;
+  color: var(--color-text-strong);
+  font-size: 1.15rem;
+}
+
+.headingRow p {
+  margin: 6px 0 0;
+  color: var(--color-muted);
+}
+
+.privacyBadge {
+  border: 1px solid var(--color-success-border);
+  border-radius: 999px;
+  background: var(--color-success-soft);
+  color: var(--color-success);
+  font-size: 0.78rem;
+  font-weight: 760;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.dropZone {
+  display: grid;
+  place-items: center;
+  min-height: 220px;
+  border: 2px dashed var(--color-border-strong);
+  border-radius: 8px;
+  background: var(--color-page-soft);
+  color: var(--color-text);
+  cursor: pointer;
+  padding: 24px;
+  text-align: center;
+}
+
+.dropZone:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.dropTitle {
+  display: block;
+  max-width: 420px;
+  font-size: 1.2rem;
+  font-weight: 760;
+}
+
+.dropText {
+  display: block;
+  margin-top: 8px;
+  color: var(--color-muted);
+}
+
+.loading {
+  margin: 14px 0 0;
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+.error {
+  margin: 14px 0 0;
+  color: var(--color-error);
+  font-weight: 700;
+}
+
+.metadataGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0 0;
+}
+
+.metadataGrid div {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-panel-raised);
+  padding: 12px;
+}
+
+.metadataGrid dt {
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  font-weight: 720;
+  text-transform: uppercase;
+}
+
+.metadataGrid dd {
+  margin: 6px 0 0;
+  color: var(--color-text-strong);
+  font-weight: 760;
+}
+
+@media (max-width: 700px) {
+  .headingRow {
+    flex-direction: column;
+  }
+
+  .metadataGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

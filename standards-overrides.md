@@ -6,7 +6,7 @@ Use this file to record deliberate deviations from the canonical coding and arch
 
 | Standard | Local decision | Rationale | Owner | Review date |
 | --- | --- | --- | --- | --- |
-| `REPLACE_WITH_STANDARD` | `REPLACE_WITH_LOCAL_DECISION` | `REPLACE_WITH_REASON` | `REPLACE_WITH_OWNER` | `REPLACE_WITH_DATE` |
+| `standards/core/operability.md` build-info copyable summary | Keep visible version, commit, and build time, but omit the `Copy build info` button in this compact single-page utility. | The provenance remains visible for users and support, while the copy action adds low-value UI weight here. An upstream Bright Builds Rules PR is planned to make copy affordances optional. | pRizz | 2026-09-25 |
 
 ## Notes
 
