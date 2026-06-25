@@ -11,6 +11,11 @@ const mocks = vi.hoisted(() => ({
   selectProcessor: vi.fn(),
 }));
 
+const originalScrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(
+  HTMLElement.prototype,
+  "scrollIntoView",
+);
+
 vi.mock("./lib/videoMetadata", () => ({
   loadVideoMetadata: mocks.loadVideoMetadata,
 }));
@@ -77,6 +82,8 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
+  restoreScrollIntoView();
 });
 
 describe("App", () => {
@@ -183,6 +190,111 @@ describe("App", () => {
     await waitFor(() => expect(mocks.process).toHaveBeenCalledTimes(1));
     expect(getByText("Export in progress")).toBeInTheDocument();
     expect(getByText("Processing frame 12 / 240")).toBeInTheDocument();
+    deferred.resolve();
+    await waitFor(() =>
+      expect(baseElement.querySelector("video")?.getAttribute("src")).toBe("blob:output"),
+    );
+  });
+
+  it("smoothly scrolls to the output pane when automatic export starts on mobile", async () => {
+    // Arrange
+    const file = new File(["video"], "source.mp4", { type: "video/mp4" });
+    const deferred = createDeferred<void>();
+    const scrollIntoView = mockScrollIntoView();
+    mockAnimationFrame();
+    mockMediaQueries({ isMobileOutputLayout: true, prefersReducedMotion: false });
+    mocks.process.mockImplementationOnce((input: ProcessInput) =>
+      deferred.promise.then(() => buildProcessResult(input)),
+    );
+    const { baseElement, getByText } = render(() => <App />);
+    const dropZone = getByText("Drop an iPhone, MP4, or MOV video").closest("label");
+
+    // Act
+    fireEvent.drop(dropZone!, {
+      dataTransfer: {
+        files: {
+          item: (index: number) => (index === 0 ? file : null),
+        },
+      },
+    });
+
+    // Assert
+    await waitFor(() => expect(mocks.process).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(scrollIntoView).toHaveBeenCalledWith({
+        behavior: "smooth",
+        block: "start",
+        inline: "nearest",
+      }),
+    );
+    deferred.resolve();
+    await waitFor(() =>
+      expect(baseElement.querySelector("video")?.getAttribute("src")).toBe("blob:output"),
+    );
+  });
+
+  it("does not scroll when automatic export starts outside the mobile layout", async () => {
+    // Arrange
+    const file = new File(["video"], "source.mp4", { type: "video/mp4" });
+    const deferred = createDeferred<void>();
+    const scrollIntoView = mockScrollIntoView();
+    mockAnimationFrame();
+    mockMediaQueries({ isMobileOutputLayout: false, prefersReducedMotion: false });
+    mocks.process.mockImplementationOnce((input: ProcessInput) =>
+      deferred.promise.then(() => buildProcessResult(input)),
+    );
+    const { baseElement, getByText } = render(() => <App />);
+    const dropZone = getByText("Drop an iPhone, MP4, or MOV video").closest("label");
+
+    // Act
+    fireEvent.drop(dropZone!, {
+      dataTransfer: {
+        files: {
+          item: (index: number) => (index === 0 ? file : null),
+        },
+      },
+    });
+
+    // Assert
+    await waitFor(() => expect(mocks.process).toHaveBeenCalledTimes(1));
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    deferred.resolve();
+    await waitFor(() =>
+      expect(baseElement.querySelector("video")?.getAttribute("src")).toBe("blob:output"),
+    );
+  });
+
+  it("uses instant output-pane scrolling when reduced motion is preferred", async () => {
+    // Arrange
+    const file = new File(["video"], "source.mp4", { type: "video/mp4" });
+    const deferred = createDeferred<void>();
+    const scrollIntoView = mockScrollIntoView();
+    mockAnimationFrame();
+    mockMediaQueries({ isMobileOutputLayout: true, prefersReducedMotion: true });
+    mocks.process.mockImplementationOnce((input: ProcessInput) =>
+      deferred.promise.then(() => buildProcessResult(input)),
+    );
+    const { baseElement, getByText } = render(() => <App />);
+    const dropZone = getByText("Drop an iPhone, MP4, or MOV video").closest("label");
+
+    // Act
+    fireEvent.drop(dropZone!, {
+      dataTransfer: {
+        files: {
+          item: (index: number) => (index === 0 ? file : null),
+        },
+      },
+    });
+
+    // Assert
+    await waitFor(() => expect(mocks.process).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(scrollIntoView).toHaveBeenCalledWith({
+        behavior: "auto",
+        block: "start",
+        inline: "nearest",
+      }),
+    );
     deferred.resolve();
     await waitFor(() =>
       expect(baseElement.querySelector("video")?.getAttribute("src")).toBe("blob:output"),
@@ -300,4 +412,59 @@ function createDeferred<T>(): {
   });
 
   return { promise, resolve, reject };
+}
+
+function mockScrollIntoView() {
+  const scrollIntoView = vi.fn();
+
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value: scrollIntoView,
+  });
+
+  return scrollIntoView;
+}
+
+function restoreScrollIntoView(): void {
+  if (originalScrollIntoViewDescriptor) {
+    Object.defineProperty(
+      HTMLElement.prototype,
+      "scrollIntoView",
+      originalScrollIntoViewDescriptor,
+    );
+    return;
+  }
+
+  delete (HTMLElement.prototype as { scrollIntoView?: Element["scrollIntoView"] })
+    .scrollIntoView;
+}
+
+function mockAnimationFrame(): void {
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    callback(0);
+    return 1;
+  });
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
+}
+
+function mockMediaQueries(options: {
+  isMobileOutputLayout: boolean;
+  prefersReducedMotion: boolean;
+}): void {
+  vi.stubGlobal("matchMedia", (query: string) => {
+    const matches =
+      (query === "(max-width: 980px)" && options.isMobileOutputLayout) ||
+      (query === "(prefers-reduced-motion: reduce)" && options.prefersReducedMotion);
+
+    return {
+      matches,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    } as MediaQueryList;
+  });
 }

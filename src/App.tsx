@@ -16,6 +16,9 @@ import {
 import { loadVideoMetadata, type VideoMetadata } from "./lib/videoMetadata";
 import styles from "./App.module.css";
 
+const MOBILE_OUTPUT_LAYOUT_MEDIA_QUERY = "(max-width: 980px)";
+const REDUCED_MOTION_MEDIA_QUERY = "(prefers-reduced-motion: reduce)";
+
 export default function App() {
   const [maybeFile, setMaybeFile] = createSignal<File | null>(null);
   const [maybeMetadata, setMaybeMetadata] = createSignal<VideoMetadata | null>(null);
@@ -33,6 +36,9 @@ export default function App() {
     null,
   );
   let maybeAbortController: AbortController | null = null;
+  let maybeOutputPaneElement: HTMLElement | null = null;
+  let shouldScrollOutputOnNextExport = false;
+  let maybeOutputScrollFrame: number | null = null;
 
   createEffect(() => {
     const metadata = maybeMetadata();
@@ -68,6 +74,7 @@ export default function App() {
 
   onCleanup(() => {
     maybeAbortController?.abort();
+    cancelOutputScrollFrame();
     revokeRenderedVideo(maybeOutput());
   });
 
@@ -108,10 +115,41 @@ export default function App() {
     () => isLoadingMetadata() || isExporting() || maybePendingAutoExportFile() !== null,
   );
 
+  const cancelOutputScrollFrame = () => {
+    if (maybeOutputScrollFrame === null || typeof globalThis.cancelAnimationFrame !== "function") {
+      maybeOutputScrollFrame = null;
+      return;
+    }
+
+    globalThis.cancelAnimationFrame(maybeOutputScrollFrame);
+    maybeOutputScrollFrame = null;
+  };
+
+  const scrollOutputPaneOnMobile = () => {
+    const maybeOutputPane = maybeOutputPaneElement;
+
+    if (!maybeOutputPane || !doesMediaQueryMatch(MOBILE_OUTPUT_LAYOUT_MEDIA_QUERY)) {
+      return;
+    }
+
+    cancelOutputScrollFrame();
+
+    if (typeof globalThis.requestAnimationFrame !== "function") {
+      scrollElementIntoView(maybeOutputPane);
+      return;
+    }
+
+    maybeOutputScrollFrame = globalThis.requestAnimationFrame(() => {
+      maybeOutputScrollFrame = null;
+      scrollElementIntoView(maybeOutputPane);
+    });
+  };
+
   const handleFileSelected = async (file: File) => {
     maybeAbortController?.abort();
     const abortController = new AbortController();
     maybeAbortController = abortController;
+    shouldScrollOutputOnNextExport = true;
 
     clearRenderedVideos();
     setMaybeFile(file);
@@ -257,6 +295,15 @@ export default function App() {
     void handleExport(pendingFile);
   });
 
+  createEffect(() => {
+    if (!isExporting() || !shouldScrollOutputOnNextExport) {
+      return;
+    }
+
+    shouldScrollOutputOnNextExport = false;
+    scrollOutputPaneOnMobile();
+  });
+
   const clearRenderedVideos = () => {
     revokeRenderedVideo(maybeOutput());
     setMaybeOutput(null);
@@ -297,6 +344,9 @@ export default function App() {
             hasExportAttempted={hasExportAttempted()}
             onExport={() => void handleExport()}
             onCancel={handleCancel}
+            onOutputPaneReady={(element) => {
+              maybeOutputPaneElement = element;
+            }}
           />
         </div>
 
@@ -346,4 +396,16 @@ function downloadRenderedVideo(renderedVideo: RenderedVideo): void {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
+}
+
+function scrollElementIntoView(element: HTMLElement): void {
+  element.scrollIntoView({
+    behavior: doesMediaQueryMatch(REDUCED_MOTION_MEDIA_QUERY) ? "auto" : "smooth",
+    block: "start",
+    inline: "nearest",
+  });
+}
+
+function doesMediaQueryMatch(query: string): boolean {
+  return typeof globalThis.matchMedia === "function" && globalThis.matchMedia(query).matches;
 }

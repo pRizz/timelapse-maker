@@ -17,6 +17,7 @@ type OutputPaneProps = {
   hasExportAttempted: boolean;
   onExport: () => void;
   onCancel: () => void;
+  onOutputPaneReady?: (element: HTMLElement) => void;
 };
 
 export function OutputPane(props: OutputPaneProps) {
@@ -39,7 +40,11 @@ export function OutputPane(props: OutputPaneProps) {
       : 0;
 
   return (
-    <section class={styles.panel} aria-labelledby="output-title">
+    <section
+      class={styles.panel}
+      aria-labelledby="output-title"
+      ref={(element) => props.onOutputPaneReady?.(element)}
+    >
       <div class={styles.heading}>
         <h2 id="output-title">Output</h2>
         <p>
