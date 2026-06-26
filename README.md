@@ -5,7 +5,11 @@
 <!-- Managed upstream by bright-builds-rules. If this badge block needs a fix, open an upstream PR or issue instead of editing the downstream managed block. Keep repo-local README content outside this managed badge block. -->
 
 [![GitHub Stars](https://img.shields.io/github/stars/pRizz/timelapse-maker)](https://github.com/pRizz/timelapse-maker)
+[![Deploy Pages](https://img.shields.io/github/actions/workflow/status/pRizz/timelapse-maker/deploy-pages.yml?style=flat-square&logo=github&label=Deploy%20Pages)](https://github.com/pRizz/timelapse-maker/actions/workflows/deploy-pages.yml)
 [![License](https://img.shields.io/github/license/pRizz/timelapse-maker?style=flat-square)](./LICENSE)
+[![TypeScript 5.9.3](https://img.shields.io/badge/TypeScript-5.9.3-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![SolidJS 1.9.13](https://img.shields.io/badge/SolidJS-1.9.13-2C4F7C?logo=solid&logoColor=white)](https://www.solidjs.com/)
+[![Vite 8.1.0](https://img.shields.io/badge/Vite-8.1.0-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
 [![Bright Builds: Rules](https://raw.githubusercontent.com/bright-builds-llc/bright-builds-rules/main/public/badges/bright-builds-rules-flat.svg)](https://github.com/bright-builds-llc/bright-builds-rules)
 [![OpenLinks profile](https://img.shields.io/badge/OpenLinks-profile-0F172A)](https://openlinks.us/)
 
